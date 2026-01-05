@@ -1,0 +1,511 @@
+-- KAHOOT BOT CONFIGURATION
+getgenv().owner = "i8agy" -- Owner username
+getgenv().ownerID = 7789664710 -- Owner user ID
+getgenv().prefix = ";" -- Command prefix
+getgenv().fpslimit = 30 -- FPS limit for bots
+getgenv().bots = {
+    "i8agy70",      -- Bot 1: Question host
+    "i8agy71",      -- Bot 2: Answer option 1
+    "i8agy72",      -- Bot 3: Answer option 2
+    "i8agy38",      -- Bot 4: Answer option 3
+    "i8agy36",      -- Bot 5: Answer option 4
+    "urination_king" -- Bot 6: Scoreboard tracker
+}
+
+-- ============================================
+-- KAHOOT SCRIPT - DO NOT EDIT BELOW THIS LINE
+-- ============================================
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Check if this account is a bot
+local MyRole = nil
+local BotIndex = nil
+for i, botName in pairs(getgenv().bots) do
+    if LocalPlayer.Name == botName then
+        BotIndex = i
+        if i == 1 then MyRole = "host"
+        elseif i == 2 then MyRole = "answer1"
+        elseif i == 3 then MyRole = "answer2"
+        elseif i == 4 then MyRole = "answer3"
+        elseif i == 5 then MyRole = "answer4"
+        elseif i == 6 then MyRole = "scoreboard"
+        end
+        break
+    end
+end
+
+if not MyRole then
+    if LocalPlayer.Name == getgenv().owner then
+        print("✓ Kahoot Script Loaded (Owner)")
+        print("Commands: " .. getgenv().prefix .. "setup, " .. getgenv().prefix .. "start, " .. getgenv().prefix .. "stop, " .. getgenv().prefix .. "reset")
+    else
+        warn("This account is not configured as a bot or owner!")
+    end
+    return
+end
+
+-- Game State
+local GameActive = false
+local CurrentQuestion = 0
+local PlayerScores = {}
+local AnswerSubmissions = {}
+local QuestionStartTime = 0
+local ScriptActive = true
+
+-- Question Database
+local Questions = {
+    {q = "What color is an orange?", a = {"Red", "Blue", "Orange", "Green"}, c = 3},
+    {q = "How many legs does a spider have?", a = {"6", "8", "10", "4"}, c = 2},
+    {q = "What is 15 + 27?", a = {"32", "42", "52", "40"}, c = 2},
+    {q = "Which planet do humans live on?", a = {"Mars", "Earth", "Venus", "Jupiter"}, c = 2},
+    {q = "What is the square root of 144?", a = {"10", "11", "12", "14"}, c = 3},
+    {q = "What is the capital of Germany?", a = {"Munich", "Berlin", "Frankfurt", "Hamburg"}, c = 2},
+    {q = "What does CPU stand for?", a = {"Central Processing Unit", "Computer Power Unit", "Core Performance Utility", "Control Program Unit"}, c = 1},
+    {q = "What is 9 x 7?", a = {"56", "63", "72", "69"}, c = 2},
+    {q = "Which gas do humans primarily breathe in?", a = {"Carbon Dioxide", "Oxygen", "Nitrogen", "Hydrogen"}, c = 2},
+    {q = "How many sides does a hexagon have?", a = {"5", "6", "7", "8"}, c = 2},
+    {q = "What is the boiling point of water in Celsius?", a = {"0", "50", "100", "212"}, c = 3},
+    {q = "Which ocean is the largest?", a = {"Atlantic", "Indian", "Arctic", "Pacific"}, c = 4},
+    {q = "What is 2 to the power of 5?", a = {"16", "32", "64", "24"}, c = 2},
+    {q = "Which element has the chemical symbol 'Fe'?", a = {"Fluorine", "Iron", "Lead", "Zinc"}, c = 2},
+    {q = "What year did World War II end?", a = {"1943", "1944", "1945", "1946"}, c = 3},
+    {q = "Which country has the largest population?", a = {"USA", "India", "Russia", "China"}, c = 4},
+    {q = "What is the value of π rounded to two decimals?", a = {"3.12", "3.14", "3.16", "3.41"}, c = 2},
+    {q = "How many bytes are in a kilobyte (KB)?", a = {"1000", "512", "1024", "2048"}, c = 3},
+    {q = "Which organ is responsible for filtering blood?", a = {"Heart", "Liver", "Kidneys", "Lungs"}, c = 3},
+    {q = "What is 81 ÷ 9?", a = {"7", "8", "9", "10"}, c = 3},
+    {q = "Which programming language is primarily used for web styling?", a = {"HTML", "CSS", "JavaScript", "Python"}, c = 2},
+    {q = "What is the capital of Australia?", a = {"Sydney", "Melbourne", "Canberra", "Perth"}, c = 3},
+    {q = "Solve: (8 × 5) − (6 ÷ 2)", a = {"37", "38", "39", "40"}, c = 2},
+    {q = "Which planet has the strongest gravity?", a = {"Earth", "Saturn", "Jupiter", "Neptune"}, c = 3},
+    {q = "What is the main language spoken in Brazil?", a = {"Spanish", "Portuguese", "English", "French"}, c = 2},
+    {q = "How many bones are in the adult human body?", a = {"198", "206", "212", "220"}, c = 2},
+    {q = "What does RAM stand for?", a = {"Read Access Memory", "Random Access Memory", "Rapid Allocation Module", "Run Active Memory"}, c = 2},
+    {q = "Which number is a prime number?", a = {"21", "33", "29", "39"}, c = 3},
+    {q = "What is the hardest natural substance on Earth?", a = {"Gold", "Iron", "Diamond", "Quartz"}, c = 3},
+    {q = "What is 7 squared?", a = {"42", "49", "56", "64"}, c = 2},
+    {q = "Which blood type is known as the universal donor?", a = {"A", "B", "AB", "O negative"}, c = 4},
+    {q = "What is the chemical formula for water?", a = {"CO2", "H2O", "O2", "NaCl"}, c = 2},
+    {q = "Which continent has the most countries?", a = {"Asia", "Africa", "Europe", "South America"}, c = 2},
+    {q = "What is the speed of light (approx.)?", a = {"300,000 km/s", "150,000 km/s", "1,000 km/s", "30,000 km/s"}, c = 1},
+    {q = "Which number comes next: 2, 6, 12, 20, ?", a = {"28", "30", "32", "24"}, c = 1},
+    {q = "Who painted the Mona Lisa?", a = {"Michelangelo", "Van Gogh", "Picasso", "Leonardo da Vinci"}, c = 4},
+    {q = "What is the capital of South Korea?", a = {"Busan", "Seoul", "Incheon", "Daegu"}, c = 2},
+    {q = "Which planet is closest to the sun?", a = {"Venus", "Earth", "Mercury", "Mars"}, c = 3},
+    {q = "What is 1001 − 999?", a = {"1", "2", "3", "4"}, c = 2},
+    {q = "What is 13 × 17?", a = {"221", "231", "201", "211"}, c = 1},
+    {q = "Which country has the most time zones?", a = {"USA", "Russia", "France", "China"}, c = 3},
+    {q = "What is the base-10 logarithm of 1000?", a = {"2", "4", "1", "3"}, c = 4},
+    {q = "Which particle has a negative charge?", a = {"Proton", "Neutron", "Electron", "Photon"}, c = 3},
+    {q = "What is the capital of Turkey?", a = {"Istanbul", "Izmir", "Bursa", "Ankara"}, c = 4},
+    {q = "Solve: 3(4 + 6) − 5", a = {"25", "30", "20", "15"}, c = 1},
+    {q = "Which metal is liquid at room temperature?", a = {"Gallium", "Mercury", "Lead", "Tin"}, c = 2},
+    {q = "How many prime numbers are there below 20?", a = {"7", "8", "6", "9"}, c = 1},
+    {q = "What does HTTP stand for?", a = {"HyperText Transfer Protocol", "High Transmission Text Program", "Host Transfer Text Protocol", "Hyperlink Transmission Process"}, c = 1},
+    {q = "Which planet has the most moons?", a = {"Jupiter", "Saturn", "Uranus", "Neptune"}, c = 2},
+    {q = "What is the derivative of x²?", a = {"x", "2x", "x²", "2"}, c = 2},
+    {q = "Which country invented paper?", a = {"Egypt", "China", "Greece", "India"}, c = 2},
+    {q = "What is the chemical symbol for potassium?", a = {"P", "Pt", "K", "Po"}, c = 3},
+    {q = "What is 2³ × 3²?", a = {"36", "72", "24", "18"}, c = 1},
+    {q = "Which organ produces insulin?", a = {"Liver", "Pancreas", "Kidneys", "Stomach"}, c = 2},
+    {q = "What is the largest desert in the world?", a = {"Sahara", "Gobi", "Antarctica", "Arabian"}, c = 3},
+    {q = "Which programming language is Roblox primarily scripted in?", a = {"Python", "JavaScript", "Lua", "C#"}, c = 3},
+    {q = "What is the sum of the interior angles of a triangle?", a = {"90°", "180°", "270°", "360°"}, c = 2},
+    {q = "Which country has the longest coastline?", a = {"Russia", "Australia", "USA", "Canada"}, c = 4},
+    {q = "What is the cube root of 27?", a = {"2", "9", "3", "6"}, c = 3},
+    {q = "What is the binary representation of decimal 5?", a = {"101", "110", "011", "100"}, c = 1},
+    {q = "Which gas is most abundant in Earth's atmosphere?", a = {"Oxygen", "Carbon Dioxide", "Nitrogen", "Argon"}, c = 3},
+    {q = "What is the capital of Switzerland?", a = {"Zurich", "Geneva", "Bern", "Basel"}, c = 3},
+    {q = "Which law states that energy cannot be created or destroyed?", a = {"Newton's First Law", "Law of Inertia", "Law of Thermodynamics", "Conservation of Energy"}, c = 4},
+    {q = "What is 64 in base 2?", a = {"1000000", "1100000", "100000", "111111"}, c = 1},
+    {q = "Which element has the highest atomic number naturally occurring?", a = {"Uranium", "Plutonium", "Thorium", "Osmium"}, c = 1},
+    {q = "How many faces does a cube have?", a = {"4", "8", "6", "12"}, c = 3},
+    {q = "What does GPU stand for?", a = {"General Processing Unit", "Graphical Power Utility", "Graphics Processing Unit", "Graphical Performance Unit"}, c = 3},
+    {q = "Which number completes the sequence: 1, 1, 2, 3, 5, ?", a = {"7", "8", "6", "9"}, c = 2},
+    {q = "What is the pH of pure water?", a = {"5", "6", "7", "8"}, c = 3},
+    {q = "Which planet has a day longer than its year?", a = {"Mars", "Mercury", "Venus", "Neptune"}, c = 3},
+    {q = "What is the smallest prime number?", a = {"1", "2", "3", "5"}, c = 2},
+    {q = "Which country uses the Yen?", a = {"China", "South Korea", "Japan", "Thailand"}, c = 3},
+    {q = "What is 5! (factorial)?", a = {"60", "100", "24", "120"}, c = 4},
+    {q = "Which part of the brain controls balance?", a = {"Cerebrum", "Cerebellum", "Brainstem", "Hypothalamus"}, c = 2},
+    {q = "What is the capital of Norway?", a = {"Stockholm", "Oslo", "Copenhagen", "Helsinki"}, c = 2},
+    {q = "Which number is irrational?", a = {"4", "9", "√2", "16"}, c = 3},
+    {q = "What is the SI unit of force?", a = {"Watt", "Joule", "Newton", "Pascal"}, c = 3},
+    {q = "What is 0 divided by any non-zero number?", a = {"Undefined", "0", "1", "Infinity"}, c = 2},
+    {q = "What is 18 × 6?", a = {"108", "96", "112", "104"}, c = 1},
+    {q = "Which country is both in Europe and Asia?", a = {"Greece", "Turkey", "Italy", "Spain"}, c = 2},
+    {q = "What does Wi-Fi stand for?", a = {"Wireless Fidelity", "Wide Frequency", "Wireless Fiber", "Web Finder"}, c = 1},
+    {q = "What is 75% of 200?", a = {"100", "125", "150", "175"}, c = 3},
+    {q = "Which planet is known for its rings?", a = {"Jupiter", "Neptune", "Saturn", "Uranus"}, c = 3},
+    {q = "How many seconds are in one minute?", a = {"100", "30", "60", "90"}, c = 3},
+    {q = "What is the capital of Spain?", a = {"Barcelona", "Madrid", "Valencia", "Seville"}, c = 2},
+    {q = "Which device is used to measure temperature?", a = {"Barometer", "Thermometer", "Altimeter", "Speedometer"}, c = 2},
+    {q = "What is 9 × 8?", a = {"64", "72", "81", "69"}, c = 2},
+    {q = "Which continent is the Sahara Desert located on?", a = {"Asia", "Africa", "Australia", "South America"}, c = 2},
+    {q = "What is the opposite of transparent?", a = {"Clear", "Opaque", "Visible", "Bright"}, c = 2},
+    {q = "How many players are on a soccer team (on the field)?", a = {"9", "10", "11", "12"}, c = 3},
+    {q = "What is the main ingredient in glass?", a = {"Salt", "Sand", "Clay", "Stone"}, c = 2},
+    {q = "What is 120 ÷ 10?", a = {"10", "11", "12", "14"}, c = 3},
+    {q = "Which country is famous for the Great Wall?", a = {"Japan", "China", "Mongolia", "South Korea"}, c = 2},
+    {q = "What does GPS help you do?", a = {"Make calls", "Navigate", "Browse the internet", "Play music"}, c = 2},
+    {q = "Which metal is commonly used in electrical wiring?", a = {"Iron", "Copper", "Aluminum", "Steel"}, c = 2},
+    {q = "What is 45 + 55?", a = {"90", "95", "100", "110"}, c = 3},
+    {q = "Which ocean is between Africa and Australia?", a = {"Atlantic", "Pacific", "Indian", "Arctic"}, c = 3},
+    {q = "How many hours are in a weekend (Saturday + Sunday)?", a = {"24", "36", "48", "72"}, c = 3},
+    {q = "What does ATM stand for?", a = {"Automatic Teller Machine", "Advanced Transfer Mode", "Auto Transaction Module", "Active Time Manager"}, c = 1},
+    {q = "What is the freezing point of water in Fahrenheit?", a = {"0°F", "32°F", "100°F", "212°F"}, c = 2},
+    {q = "Which country uses the pound sterling?", a = {"USA", "Germany", "France", "United Kingdom"}, c = 4},
+    {q = "What is 7 × 12?", a = {"72", "84", "96", "78"}, c = 2},
+    {q = "Which animal is known as man's best friend?", a = {"Cat", "Horse", "Dog", "Parrot"}, c = 3},
+    {q = "What is the capital of Brazil?", a = {"Rio de Janeiro", "São Paulo", "Brasília", "Salvador"}, c = 3},
+    {q = "What do batteries store?", a = {"Heat", "Light", "Chemical energy", "Sound"}, c = 3},
+    {q = "What is half of 90?", a = {"40", "45", "50", "55"}, c = 2},
+    {q = "Which shape has four equal sides?", a = {"Rectangle", "Triangle", "Square", "Circle"}, c = 3},
+    {q = "What is the main purpose of a firewall?", a = {"Cool computers", "Store files", "Block unauthorized access", "Speed up internet"}, c = 3},
+    {q = "Which country is known for pyramids?", a = {"Mexico", "Peru", "Egypt", "India"}, c = 3},
+    {q = "What is 30% of 100?", a = {"20", "25", "30", "35"}, c = 3},
+    {q = "Which sense is used to taste?", a = {"Touch", "Smell", "Sight", "Taste"}, c = 4},
+    {q = "What is the capital of Greece?", a = {"Athens", "Sparta", "Thessaloniki", "Crete"}, c = 1},
+    {q = "What is 1 hour and 30 minutes in minutes?", a = {"60", "90", "120", "150"}, c = 2},
+    {q = "Which device displays images from a computer?", a = {"Keyboard", "Monitor", "Mouse", "Printer"}, c = 2},
+    {q = "What does USB stand for?", a = {"Universal Serial Bus", "Unified System Board", "User Signal Bridge", "Universal Storage Bank"}, c = 1},
+    {q = "Which artist is known as the 'King of Pop'?", a = {"Elvis Presley", "Michael Jackson", "Prince", "Justin Bieber"}, c = 2},
+    {q = "Which band released the album 'Dark Side of the Moon'?", a = {"Pink Floyd", "Queen", "The Beatles", "Led Zeppelin"}, c = 1},
+    {q = "What platform is primarily used for short-form videos?", a = {"YouTube", "TikTok", "Twitch", "Reddit"}, c = 2},
+    {q = "Which artist released the song 'Shape of You'?", a = {"Ed Sheeran", "Drake", "The Weeknd", "Shawn Mendes"}, c = 1},
+    {q = "What does DM stand for online?", a = {"Direct Message", "Digital Media", "Data Mode", "Display Message"}, c = 1},
+    {q = "Which band is Freddie Mercury associated with?", a = {"Queen", "U2", "The Rolling Stones", "Nirvana"}, c = 1},
+    {q = "What music streaming service uses playlists like 'RapCaviar'?", a = {"Apple Music", "Spotify", "SoundCloud", "YouTube Music"}, c = 2},
+    {q = "Which rapper released the album 'The Marshall Mathers LP'?", a = {"Eminem", "Jay-Z", "Nas", "50 Cent"}, c = 1},
+    {q = "What does 'viral' mean online?", a = {"Deleted quickly", "Shared widely", "Paid promotion", "Low quality"}, c = 2},
+    {q = "Which band wrote 'Smells Like Teen Spirit'?", a = {"Pearl Jam", "Soundgarden", "Nirvana", "Foo Fighters"}, c = 3},
+    {q = "What platform is mainly used for live streaming games?", a = {"YouTube", "Kick", "Instagram", "Twitch"}, c = 4},
+    {q = "Which artist is known for the album 'After Hours'?", a = {"Drake", "The Weeknd", "Post Malone", "Travis Scott"}, c = 2},
+    {q = "What does 'feat.' mean in a song title?", a = {"Remix", "Featuring", "Final Edit", "Festival Track"}, c = 2},
+    {q = "Which genre is Metallica best known for?", a = {"Pop", "Jazz", "Heavy Metal", "Country"}, c = 3},
+    {q = "What social media platform uses 'subreddits'?", a = {"Twitter", "Reddit", "Discord", "Facebook"}, c = 2},
+    {q = "Which artist released 'Blinding Lights'?", a = {"Dua Lipa", "Harry Styles", "The Weeknd", "Bruno Mars"}, c = 3},
+    {q = "What is SoundCloud mainly used for?", a = {"Video streaming", "Music sharing", "Photo editing", "Gaming"}, c = 2},
+    {q = "Which band was John Lennon a member of?", a = {"The Who", "The Rolling Stones", "The Beatles", "Pink Floyd"}, c = 3},
+    {q = "What does 'streaming' mean?", a = {"Downloading files", "Playing media online", "Recording audio", "Uploading content"}, c = 2},
+    {q = "Which artist is known for the song 'Bad Guy'?", a = {"Lorde", "Billie Eilish", "Halsey", "Ariana Grande"}, c = 2},
+    {q = "Which platform uses 'stories' that disappear?", a = {"YouTube", "Snapchat", "Reddit", "Spotify"}, c = 2},
+    {q = "What music genre is Drake mainly associated with?", a = {"Rock", "Country", "Hip-Hop", "EDM"}, c = 3},
+    {q = "Which band released 'Bohemian Rhapsody'?", a = {"Queen", "ABBA", "Journey", "Eagles"}, c = 1},
+    {q = "What does 'NSFW' stand for?", a = {"Not Safe For Work", "New Social Feature Weekly", "No Sound For Web", "Network Service Firewall"}, c = 1},
+    {q = "Which artist goes by the nickname 'Ye'?", a = {"Kanye West", "Jay-Z", "Future", "Lil Wayne"}, c = 1},
+    {q = "What platform is primarily used for voice chat in gaming?", a = {"Zoom", "Discord", "Skype", "Teams"}, c = 2},
+    {q = "Which genre uses DJs and electronic beats?", a = {"Rock", "EDM", "Blues", "Country"}, c = 2},
+    {q = "Which band is known for the song 'Hotel California'?", a = {"Eagles", "Fleetwood Mac", "U2", "Aerosmith"}, c = 1},
+    {q = "What does 'OP' mean in online slang?", a = {"Original Poster", "Overpowered", "Open Profile", "Both A and B"}, c = 4},
+    {q = "Which artist is associated with the album '1989'?", a = {"Taylor Swift", "Adele", "Rihanna", "Katy Perry"}, c = 1},
+    {q = "Which platform is known for hashtags?", a = {"Discord", "Instagram", "Steam", "Spotify"}, c = 2},
+    {q = "What does 'collab' mean?", a = {"Collaboration", "Collection", "Collapse"}, c = 2},
+    {q = "Which band is famous for the song 'Wonderwall'?", a = {"Blur", "Radiohead", "Oasis", "Coldplay"}, c = 3},
+    {q = "What is a remix?", a = {"Original version", "Live performance", "Reworked version", "Unreleased song"}, c = 3},
+    {q = "Which online platform is mainly for professional networking?", a = {"LinkedIn", "Instagram", "TikTok", "Snapchat"}, c = 1},
+}
+
+-- Helper Functions
+local function Say(msg)
+    if not msg then return end
+    pcall(function()
+        if ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents") then
+            ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(tostring(msg), "All")
+        end
+    end)
+end
+
+local function GetOwner()
+    local owner = Players:FindFirstChild(getgenv().owner)
+    if not owner then
+        owner = Players:GetPlayerByUserId(getgenv().ownerID)
+    end
+    return owner
+end
+
+local function Teleport(pos)
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(pos)
+    end
+end
+
+local function GetPlayersNearby(range)
+    local nearby = {}
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return nearby
+    end
+    
+    local myPos = LocalPlayer.Character.HumanoidRootPart.Position
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local isBotAccount = false
+            for _, botName in pairs(getgenv().bots) do
+                if plr.Name == botName then
+                    isBotAccount = true
+                    break
+                end
+            end
+            
+            if not isBotAccount then
+                local dist = (plr.Character.HumanoidRootPart.Position - myPos).Magnitude
+                if dist <= range then
+                    table.insert(nearby, plr)
+                end
+            end
+        end
+    end
+    return nearby
+end
+
+-- Command: Setup
+local function DoSetup()
+    local owner = GetOwner()
+    if not owner or not owner.Character or not owner.Character:FindFirstChild("HumanoidRootPart") then
+        return
+    end
+    
+    local ownerPos = owner.Character.HumanoidRootPart.Position
+    local ownerLook = owner.Character.HumanoidRootPart.CFrame.LookVector
+    local front = ownerPos + (ownerLook * 10)
+    
+    if MyRole == "host" then
+        Teleport(front + Vector3.new(0, 0, 5))
+        wait(0.3)
+        Say("✓ Host Ready")
+    elseif MyRole == "answer1" then
+        Teleport(front + Vector3.new(-6, 0, 0))
+    elseif MyRole == "answer2" then
+        Teleport(front + Vector3.new(-2, 0, 0))
+    elseif MyRole == "answer3" then
+        Teleport(front + Vector3.new(2, 0, 0))
+    elseif MyRole == "answer4" then
+        Teleport(front + Vector3.new(6, 0, 0))
+    elseif MyRole == "scoreboard" then
+        Teleport(front + Vector3.new(0, 10, 0))
+        wait(0.3)
+        Say("✓ Scoreboard Ready")
+    end
+end
+
+-- Command: Start Quiz
+local function StartQuiz()
+    if MyRole ~= "host" then return end
+    
+    GameActive = true
+    CurrentQuestion = 0
+    PlayerScores = {}
+    
+    Say("🎮 KAHOOT QUIZ STARTING 🎮")
+    wait(2)
+    Say("Type 1, 2, 3, or 4 to answer!")
+    wait(2)
+    Say("Get ready...")
+    wait(1)
+    Say("[START]")
+end
+
+-- Quiz Loop (Host only)
+spawn(function()
+    while ScriptActive do
+        wait(1)
+        if GameActive and MyRole == "host" then
+            for i = 1, #Questions do
+                if not GameActive then break end
+                
+                CurrentQuestion = i
+                local q = Questions[i]
+                
+                -- Show question (5 seconds)
+                Say("[Q" .. i .. "]")
+                wait(0.5)
+                Say("Question " .. i .. "/" .. #Questions .. ": " .. q.q)
+                wait(5)
+                
+                -- Show answers (10 seconds to answer)
+                Say("[A" .. i .. "]")
+                wait(10.5)
+                
+                -- Show correct answer
+                Say("[C" .. q.c .. "]")
+                wait(0.5)
+                Say("✓ Correct: Option " .. q.c)
+                wait(2)
+                
+                -- Show scores
+                Say("[SCORE]")
+                wait(3.5)
+            end
+            
+            GameActive = false
+            Say("[END]")
+            wait(0.5)
+            Say("🏆 QUIZ COMPLETE 🏆")
+            wait(1)
+            Say("[FINAL]")
+        end
+    end
+end)
+
+-- Answer Bot Responses
+spawn(function()
+    while ScriptActive do
+        wait(0.1)
+    end
+end)
+
+-- Scoreboard Display
+local function ShowScores()
+    if MyRole ~= "scoreboard" then return end
+    
+    local scores = {}
+    for name, score in pairs(PlayerScores) do
+        table.insert(scores, {n = name, s = score})
+    end
+    
+    table.sort(scores, function(a, b) return a.s > b.s end)
+    
+    Say("📊 SCOREBOARD 📊")
+    wait(0.4)
+    
+    for i = 1, math.min(5, #scores) do
+        local place = i .. "."
+        if i == 1 then place = "🥇" elseif i == 2 then place = "🥈" elseif i == 3 then place = "🥉" end
+        Say(place .. " " .. scores[i].n .. ": " .. scores[i].s .. " pts")
+        wait(0.4)
+    end
+end
+
+-- Chat Message Handler
+local function OnChat(player, message)
+    if not message or typeof(message) ~= "string" then return end
+    
+    local isOwner = (player.Name == getgenv().owner or player.UserId == getgenv().ownerID)
+    
+    -- Owner commands
+    if isOwner then
+        local cmd = message:lower()
+        if cmd == getgenv().prefix .. "setup" then
+            DoSetup()
+        elseif cmd == getgenv().prefix .. "start" then
+            StartQuiz()
+        elseif cmd == getgenv().prefix .. "stop" then
+            GameActive = false
+            if MyRole == "host" then
+                Say("⏹️ Quiz Stopped")
+            end
+        elseif cmd == getgenv().prefix .. "reset" then
+            PlayerScores = {}
+            CurrentQuestion = 0
+            AnswerSubmissions = {}
+            if MyRole == "host" then
+                Say("🔄 Scores Reset")
+            end
+        elseif cmd == getgenv().prefix .. "quit" then
+            ScriptActive = false
+            if MyRole == "host" then
+                Say("👋 Kahoot Script Deactivated")
+            end
+        elseif cmd == getgenv().prefix .. "status" then
+            if MyRole == "host" then
+                Say("✓ Active - Role: Host")
+            end
+        end
+    end
+    
+    -- Quiz signals
+    if message:match("%[Q%d+%]") then
+        local qNum = tonumber(message:match("%[Q(%d+)%]"))
+        if qNum then
+            CurrentQuestion = qNum
+            AnswerSubmissions = {}
+            QuestionStartTime = tick()
+        end
+    end
+    
+    if message:match("%[A%d+%]") and CurrentQuestion > 0 then
+        local qNum = tonumber(message:match("%[A(%d+)%]"))
+        if qNum and Questions[qNum] then
+            wait(0.3)
+            local q = Questions[qNum]
+            if MyRole == "answer1" then
+                Say("1️⃣ " .. q.a[1])
+            elseif MyRole == "answer2" then
+                Say("2️⃣ " .. q.a[2])
+            elseif MyRole == "answer3" then
+                Say("3️⃣ " .. q.a[3])
+            elseif MyRole == "answer4" then
+                Say("4️⃣ " .. q.a[4])
+            end
+        end
+    end
+    
+    if message:match("%[SCORE%]") or message:match("%[FINAL%]") then
+        wait(0.3)
+        ShowScores()
+    end
+    
+    if message:match("%[C%d+%]") then
+        local correct = tonumber(message:match("%[C(%d+)%]"))
+        if correct then
+            local sorted = {}
+            for name, data in pairs(AnswerSubmissions) do
+                if data.ans == correct then
+                    table.insert(sorted, {n = name, t = data.time})
+                end
+            end
+            
+            table.sort(sorted, function(a, b) return a.t < b.t end)
+            
+            for i, sub in ipairs(sorted) do
+                local pts = math.max(0, 11 - i)
+                if i <= 10 then
+                    PlayerScores[sub.n] = (PlayerScores[sub.n] or 0) + pts
+                end
+            end
+        end
+    end
+    
+    -- Player answers (only answer1 tracks)
+    if MyRole == "answer1" and CurrentQuestion > 0 then
+        local ans = tonumber(message)
+        if ans and ans >= 1 and ans <= 4 then
+            if not AnswerSubmissions[player.Name] then
+                local nearby = GetPlayersNearby(50)
+                for _, p in pairs(nearby) do
+                    if p == player then
+                        AnswerSubmissions[player.Name] = {
+                            ans = ans,
+                            time = tick() - QuestionStartTime
+                        }
+                        break
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Connect chat events
+for _, player in pairs(Players:GetPlayers()) do
+    player.Chatted:Connect(function(msg)
+        OnChat(player, msg)
+    end)
+end
+
+Players.PlayerAdded:Connect(function(player)
+    player.Chatted:Connect(function(msg)
+        OnChat(player, msg)
+    end)
+end)
+
+-- Set FPS limit
+pcall(function()
+    setfpscap(getgenv().fpslimit)
+end)
+
+print("✓ Kahoot Bot Active - Role: " .. MyRole)
+print("✓ Listening for: " .. getgenv().owner .. " (ID: " .. getgenv().ownerID .. ")")
