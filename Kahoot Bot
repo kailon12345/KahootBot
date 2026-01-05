@@ -7,16 +7,45 @@ getgenv().bots = {
     "i8agy70", "i8agy71", "i8agy72", "i8agy38", "i8agy36", "urination_king"
 }
 
--- SERVICES
 local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextChatService = game:GetService("TextChatService")
-local LocalPlayer = Players.LocalPlayer
+local VirtualUser = game:GetService("VirtualUser")
+local CoreGui = game:GetService("CoreGui")
 
--- CHARACTER CHECK
-if not LocalPlayer.Character then LocalPlayer.CharacterAdded:Wait() end
+-- 1. ANTI-IDLE PROTECTION (Disables 20m Kick)
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
 
--- ROLE ASSIGNMENT
+-- 2. BLACK SCREEN UI (On Bots Only)
+if table.find(getgenv().bots, LocalPlayer.Name) then
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "SchweinsBotUI"
+    gui.DisplayOrder = 999
+    gui.IgnoreGuiInset = true
+    
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 1, 0)
+    frame.BackgroundColor3 = Color3.new(0, 0, 0)
+    frame.Active = true
+    frame.Parent = gui
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 0, 50)
+    label.Position = UDim2.new(0, 0, 0.5, -25)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.TextSize = 30
+    label.Font = Enum.Font.SourceSansBold
+    label.Text = "Running Schweins Kahoot Bots"
+    label.Parent = frame
+    gui.Parent = CoreGui
+end
+
+-- 3. ROLE ASSIGNMENT
 local MyRole = nil
 for i, botName in pairs(getgenv().bots) do
     if LocalPlayer.Name:lower() == botName:lower() then
@@ -33,18 +62,15 @@ end
 
 if not MyRole and LocalPlayer.Name ~= getgenv().owner then return end
 
--- HELPER FUNCTIONS
+-- 4. UTILITY FUNCTIONS
 local function Say(msg)
     if not msg then return end
-    local cleanMsg = tostring(msg)
-    local sayMessage = ReplicatedStorage:FindFirstChild("SayMessageRequest", true)
-    if sayMessage then
-        sayMessage:FireServer(cleanMsg, "All")
+    local sayMsg = ReplicatedStorage:FindFirstChild("SayMessageRequest", true)
+    if sayMsg then
+        sayMsg:FireServer(tostring(msg), "All")
     else
         local general = TextChatService:FindFirstChild("RBXGeneral", true)
-        if general and general:IsA("TextChannel") then
-            general:SendAsync(cleanMsg)
-        end
+        if general then general:SendAsync(tostring(msg)) end
     end
 end
 
@@ -69,28 +95,25 @@ local function Teleport(cframe)
     end
 end
 
--- DANCING LOGIC
-local ShouldDance = true
+-- 5. DANCE LOOP
+local IsDancing = true
 task.spawn(function()
     while true do
-        task.wait(10) -- Emotes last about 10s
-        if ShouldDance then
-            if MyRole == "host" then
-                Say("/e dance3")
-            elseif MyRole == "scoreboard" then
-                Say("/e dance2")
-            end
+        task.wait(10)
+        if IsDancing then
+            if MyRole == "host" then Say("/e dance3")
+            elseif MyRole == "scoreboard" then Say("/e dance2") end
         end
     end
 end)
 
--- GAME STATE
+-- 6. DATA & STATE
 local GameActive = false
 local PlayerScores = {} 
 local AnswerSubmissions = {}
 local QuestionStartTime = 0
 local PerchPosition = nil 
-local CurrentQuestionData = nil
+local CurrentQuestion = nil
 
 local Questions = {
     {q = "What color is an orange?", a = {"Red", "Blue", "Orange", "Green"}, c = 3},
@@ -109,13 +132,13 @@ local Questions = {
     {q = "Which element has the chemical symbol 'Fe'?", a = {"Fluorine", "Iron", "Lead", "Zinc"}, c = 2},
     {q = "What year did World War II end?", a = {"1943", "1944", "1945", "1946"}, c = 3},
     {q = "Which country has the largest population?", a = {"USA", "India", "Russia", "China"}, c = 4},
-    {q = "What is the value of π rounded to two decimals?", a = {"3.12", "3.14", "3.16", "3.41"}, c = 2},
+    {q = "What is the value of pi rounded to two decimals?", a = {"3.12", "3.14", "3.16", "3.41"}, c = 2},
     {q = "How many bytes are in a kilobyte (KB)?", a = {"1000", "512", "1024", "2048"}, c = 3},
     {q = "Which organ is responsible for filtering blood?", a = {"Heart", "Liver", "Kidneys", "Lungs"}, c = 3},
-    {q = "What is 81 ÷ 9?", a = {"7", "8", "9", "10"}, c = 3},
-    {q = "Which programming language is primarily used for web styling?", a = {"HTML", "CSS", "JavaScript", "Python"}, c = 2},
+    {q = "What is 81 / 9?", a = {"7", "8", "9", "10"}, c = 3},
+    {q = "Which language is primarily used for web styling?", a = {"HTML", "CSS", "JavaScript", "Python"}, c = 2},
     {q = "What is the capital of Australia?", a = {"Sydney", "Melbourne", "Canberra", "Perth"}, c = 3},
-    {q = "Solve: (8 × 5) − (6 ÷ 2)", a = {"37", "38", "39", "40"}, c = 2},
+    {q = "Solve: (8 x 5) - (6 / 2)", a = {"37", "38", "39", "40"}, c = 2},
     {q = "Which planet has the strongest gravity?", a = {"Earth", "Saturn", "Jupiter", "Neptune"}, c = 3},
     {q = "What is the main language spoken in Brazil?", a = {"Spanish", "Portuguese", "English", "French"}, c = 2},
     {q = "How many bones are in the adult human body?", a = {"198", "206", "212", "220"}, c = 2},
@@ -131,25 +154,25 @@ local Questions = {
     {q = "Who painted the Mona Lisa?", a = {"Michelangelo", "Van Gogh", "Picasso", "Leonardo da Vinci"}, c = 4},
     {q = "What is the capital of South Korea?", a = {"Busan", "Seoul", "Incheon", "Daegu"}, c = 2},
     {q = "Which planet is closest to the sun?", a = {"Venus", "Earth", "Mercury", "Mars"}, c = 3},
-    {q = "What is 1001 − 999?", a = {"1", "2", "3", "4"}, c = 2},
-    {q = "What is 13 × 17?", a = {"221", "231", "201", "211"}, c = 1},
+    {q = "What is 1001 - 999?", a = {"1", "2", "3", "4"}, c = 2},
+    {q = "What is 13 x 17?", a = {"221", "231", "201", "211"}, c = 1},
     {q = "Which country has the most time zones?", a = {"USA", "Russia", "France", "China"}, c = 3},
     {q = "What is the base-10 logarithm of 1000?", a = {"2", "4", "1", "3"}, c = 4},
     {q = "Which particle has a negative charge?", a = {"Proton", "Neutron", "Electron", "Photon"}, c = 3},
     {q = "What is the capital of Turkey?", a = {"Istanbul", "Izmir", "Bursa", "Ankara"}, c = 4},
-    {q = "Solve: 3(4 + 6) − 5", a = {"25", "30", "20", "15"}, c = 1},
+    {q = "Solve: 3(4 + 6) - 5", a = {"25", "30", "20", "15"}, c = 1},
     {q = "Which metal is liquid at room temperature?", a = {"Gallium", "Mercury", "Lead", "Tin"}, c = 2},
     {q = "How many prime numbers are there below 20?", a = {"7", "8", "6", "9"}, c = 1},
     {q = "What does HTTP stand for?", a = {"HyperText Transfer Protocol", "High Transmission Text Program", "Host Transfer Text Protocol", "Hyperlink Transmission Process"}, c = 1},
     {q = "Which planet has the most moons?", a = {"Jupiter", "Saturn", "Uranus", "Neptune"}, c = 2},
-    {q = "What is the derivative of x²?", a = {"x", "2x", "x²", "2"}, c = 2},
+    {q = "What is the derivative of x squared?", a = {"x", "2x", "x2", "2"}, c = 2},
     {q = "Which country invented paper?", a = {"Egypt", "China", "Greece", "India"}, c = 2},
     {q = "What is the chemical symbol for potassium?", a = {"P", "Pt", "K", "Po"}, c = 3},
-    {q = "What is 2³ × 3²?", a = {"36", "72", "24", "18"}, c = 1},
+    {q = "What is 2^3 x 3^2?", a = {"36", "72", "24", "18"}, c = 1},
     {q = "Which organ produces insulin?", a = {"Liver", "Pancreas", "Kidneys", "Stomach"}, c = 2},
     {q = "What is the largest desert in the world?", a = {"Sahara", "Gobi", "Antarctica", "Arabian"}, c = 3},
     {q = "Which programming language is Roblox primarily scripted in?", a = {"Python", "JavaScript", "Lua", "C#"}, c = 3},
-    {q = "What is the sum of the interior angles of a triangle?", a = {"90°", "180°", "270°", "360°"}, c = 2},
+    {q = "What is the sum of the interior angles of a triangle?", a = {"90", "180", "270", "360"}, c = 2},
     {q = "Which country has the longest coastline?", a = {"Russia", "Australia", "USA", "Canada"}, c = 4},
     {q = "What is the cube root of 27?", a = {"2", "9", "3", "6"}, c = 3},
     {q = "What is the binary representation of decimal 5?", a = {"101", "110", "011", "100"}, c = 1},
@@ -165,13 +188,13 @@ local Questions = {
     {q = "Which planet has a day longer than its year?", a = {"Mars", "Mercury", "Venus", "Neptune"}, c = 3},
     {q = "What is the smallest prime number?", a = {"1", "2", "3", "5"}, c = 2},
     {q = "Which country uses the Yen?", a = {"China", "South Korea", "Japan", "Thailand"}, c = 3},
-    {q = "What is 5! (factorial)?", a = {"60", "100", "24", "120"}, c = 4},
+    {q = "What is 5 factorial?", a = {"60", "100", "24", "120"}, c = 4},
     {q = "Which part of the brain controls balance?", a = {"Cerebrum", "Cerebellum", "Brainstem", "Hypothalamus"}, c = 2},
     {q = "What is the capital of Norway?", a = {"Stockholm", "Oslo", "Copenhagen", "Helsinki"}, c = 2},
-    {q = "Which number is irrational?", a = {"4", "9", "√2", "16"}, c = 3},
+    {q = "Which number is irrational?", a = {"4", "9", "sqrt(2)", "16"}, c = 3},
     {q = "What is the SI unit of force?", a = {"Watt", "Joule", "Newton", "Pascal"}, c = 3},
     {q = "What is 0 divided by any non-zero number?", a = {"Undefined", "0", "1", "Infinity"}, c = 2},
-    {q = "What is 18 × 6?", a = {"108", "96", "112", "104"}, c = 1},
+    {q = "What is 18 x 6?", a = {"108", "96", "112", "104"}, c = 1},
     {q = "Which country is both in Europe and Asia?", a = {"Greece", "Turkey", "Italy", "Spain"}, c = 2},
     {q = "What does Wi-Fi stand for?", a = {"Wireless Fidelity", "Wide Frequency", "Wireless Fiber", "Web Finder"}, c = 1},
     {q = "What is 75% of 200?", a = {"100", "125", "150", "175"}, c = 3},
@@ -179,22 +202,22 @@ local Questions = {
     {q = "How many seconds are in one minute?", a = {"100", "30", "60", "90"}, c = 3},
     {q = "What is the capital of Spain?", a = {"Barcelona", "Madrid", "Valencia", "Seville"}, c = 2},
     {q = "Which device is used to measure temperature?", a = {"Barometer", "Thermometer", "Altimeter", "Speedometer"}, c = 2},
-    {q = "What is 9 × 8?", a = {"64", "72", "81", "69"}, c = 2},
+    {q = "What is 9 x 8?", a = {"64", "72", "81", "69"}, c = 2},
     {q = "Which continent is the Sahara Desert located on?", a = {"Asia", "Africa", "Australia", "South America"}, c = 2},
     {q = "What is the opposite of transparent?", a = {"Clear", "Opaque", "Visible", "Bright"}, c = 2},
     {q = "How many players are on a soccer team (on the field)?", a = {"9", "10", "11", "12"}, c = 3},
     {q = "What is the main ingredient in glass?", a = {"Salt", "Sand", "Clay", "Stone"}, c = 2},
-    {q = "What is 120 ÷ 10?", a = {"10", "11", "12", "14"}, c = 3},
+    {q = "What is 120 / 10?", a = {"10", "11", "12", "14"}, c = 3},
     {q = "Which country is famous for the Great Wall?", a = {"Japan", "China", "Mongolia", "South Korea"}, c = 2},
     {q = "What does GPS help you do?", a = {"Make calls", "Navigate", "Browse the internet", "Play music"}, c = 2},
     {q = "Which metal is commonly used in electrical wiring?", a = {"Iron", "Copper", "Aluminum", "Steel"}, c = 2},
     {q = "What is 45 + 55?", a = {"90", "95", "100", "110"}, c = 3},
     {q = "Which ocean is between Africa and Australia?", a = {"Atlantic", "Pacific", "Indian", "Arctic"}, c = 3},
-    {q = "How many hours are in a weekend (Saturday + Sunday)?", a = {"24", "36", "48", "72"}, c = 3},
+    {q = "How many hours are in a weekend (Sat + Sun)?", a = {"24", "36", "48", "72"}, c = 3},
     {q = "What does ATM stand for?", a = {"Automatic Teller Machine", "Advanced Transfer Mode", "Auto Transaction Module", "Active Time Manager"}, c = 1},
-    {q = "What is the freezing point of water in Fahrenheit?", a = {"0°F", "32°F", "100°F", "212°F"}, c = 2},
+    {q = "What is the freezing point of water in Fahrenheit?", a = {"0", "32", "100", "212"}, c = 2},
     {q = "Which country uses the pound sterling?", a = {"USA", "Germany", "France", "United Kingdom"}, c = 4},
-    {q = "What is 7 × 12?", a = {"72", "84", "96", "78"}, c = 2},
+    {q = "What is 7 x 12?", a = {"72", "84", "96", "78"}, c = 2},
     {q = "Which animal is known as man's best friend?", a = {"Cat", "Horse", "Dog", "Parrot"}, c = 3},
     {q = "What is the capital of Brazil?", a = {"Rio de Janeiro", "São Paulo", "Brasília", "Salvador"}, c = 3},
     {q = "What do batteries store?", a = {"Heat", "Light", "Chemical energy", "Sound"}, c = 3},
@@ -245,7 +268,7 @@ local Questions = {
     {q = "Which online platform is mainly for professional networking?", a = {"LinkedIn", "Instagram", "TikTok", "Snapchat"}, c = 1},
 }
 
--- SCOREBOARD UTILS
+-- 7. SCOREBOARD UTILS
 local function GetSortedScores()
     local scores = {}
     for name, s in pairs(PlayerScores) do table.insert(scores, {n = name, s = s}) end
@@ -253,109 +276,96 @@ local function GetSortedScores()
     return scores
 end
 
-local function CelebrateWinners()
+local function ShowTop3()
     if MyRole ~= "scoreboard" then return end
-    ShouldDance = false -- Stop dancing for the walk-up
-    local scores = GetSortedScores()
-    if #scores == 0 then ShouldDance = true return end
+    local s = GetSortedScores()
+    if #s == 0 then return end
+    local msg = ""
+    for i = 1, math.min(3, #s) do
+        local ord = (i==1 and "1st") or (i==2 and "2nd") or (i==3 and "3rd")
+        msg = msg .. ord .. " " .. s[i].n .. " (" .. s[i].s .. ") | "
+    end
+    Say(msg)
+end
 
-    for i = 1, math.min(3, #scores) do
+local function Celebrate()
+    if MyRole ~= "scoreboard" then return end
+    IsDancing = false
+    local s = GetSortedScores()
+    if #s == 0 then IsDancing = true return end
+
+    for i = 1, math.min(3, #s) do
         task.wait(1.5)
         local emoji = (i==1 and "🏆") or (i==2 and "🥈") or (i==3 and "🥉")
         local suffix = (i==1 and "st") or (i==2 and "nd") or (i==3 and "rd")
-        Say(emoji .. " " .. scores[i].n .. " got " .. i .. suffix .. " place with " .. scores[i].s .. " points " .. emoji)
+        Say(emoji .. " " .. s[i].n .. " got " .. i .. suffix .. " place with " .. s[i].s .. " points " .. emoji)
     end
     
     task.wait(2)
     Say("Acknowledging all participants...")
     
-    for _, data in ipairs(scores) do
-        local targetPlayer = nil
+    for _, data in ipairs(s) do
+        local target = nil
         for _, p in pairs(Players:GetPlayers()) do
-            if p.DisplayName == data.n or p.Name == data.n then targetPlayer = p break end
+            if p.DisplayName == data.n or p.Name == data.n then target = p break end
         end
-        
-        if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            local tRoot = targetPlayer.Character.HumanoidRootPart
-            local frontPos = tRoot.CFrame * CFrame.new(0, 0, -4) 
-            local lookAt = CFrame.lookAt(frontPos.Position, tRoot.Position)
-            Teleport(lookAt)
-            task.wait(0.3)
-            Say("/e point")
-            task.wait(1.5)
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            local tRoot = target.Character.HumanoidRootPart
+            local fPos = tRoot.CFrame * CFrame.new(0, 0, -4) 
+            Teleport(CFrame.lookAt(fPos.Position, tRoot.Position))
+            task.wait(0.3) Say("/e point") task.wait(1.5)
         end
     end
     
     if PerchPosition then Teleport(PerchPosition) end
-    task.wait(1)
-    PlayerScores = {}
-    AnswerSubmissions = {}
-    ShouldDance = true -- Resume dancing
-    Say("/e dance2")
+    PlayerScores = {} AnswerSubmissions = {}
+    IsDancing = true task.wait(1) Say("/e dance2")
 end
 
--- HOST SEQUENCE
+-- 8. HOST LOGIC
 local function StartQuiz(length)
     if MyRole ~= "host" then return end
     GameActive = true
-    PlayerScores = {}
-    local UsedQuestions = {}
     local rounds = math.clamp(tonumber(length) or #Questions, 1, #Questions)
+    local used = {}
     
     Say("Welcome to Schweins Kahoot!")
-    task.wait(3)
-    Say("Introduce yourself bots")
-    task.wait(32) 
-    
+    task.wait(3) Say("Introduce yourself bots") task.wait(32) 
     Say("Beginning " .. rounds .. " rounds now")
     task.wait(4)
     
     for i = 1, rounds do
         if not GameActive then break end
         local pick
-        repeat pick = math.random(1, #Questions) until not UsedQuestions[pick]
-        UsedQuestions[pick] = true
-        
-        local qData = Questions[pick]
-        Say("Question " .. i .. ": " .. qData.q)
-        task.wait(2)
-        Say("(Type 1-4 or the answer)") -- Added per request
-        task.wait(2)
-        
-        Say(".options")
+        repeat pick = math.random(1, #Questions) until not used[pick]
+        used[pick] = true
+        local q = Questions[pick]
+        Say("Question " .. i .. ": " .. q.q)
+        task.wait(2) Say("(Type 1-4 or the answer)")
+        task.wait(2) Say(".options")
         task.wait(25)
-        
-        Say("The correct answer was Option " .. qData.c .. ": " .. qData.a[qData.c])
-        task.wait(3)
-        Say(".score")
+        Say("The correct answer was Option " .. q.c .. ": " .. q.a[q.c])
+        task.wait(3) Say(".score")
         task.wait(5) 
     end
-    
-    if GameActive then
-        GameActive = false
-        Say("🏆 THE QUIZ HAS ENDED! THANKS FOR PLAYING! 🏆")
-    end
+    if GameActive then Say("🏆 THE QUIZ HAS ENDED! THANKS FOR PLAYING! 🏆") end
+    GameActive = false
 end
 
--- MAIN CHAT HANDLER
+-- 9. MAIN CHAT HANDLER
 local function OnChat(player, message)
     task.spawn(function()
-        local msg = message
-        local lowerMsg = msg:lower()
+        local msg = message:lower()
         local isOwner = (player.UserId == getgenv().ownerID or player.Name == getgenv().owner)
 
-        if lowerMsg == getgenv().prefix .. "check" and MyRole then
-            Say("Bot: " .. LocalPlayer.Name .. " | Role: " .. MyRole)
-        end
-
         if isOwner then
-            if lowerMsg:sub(1, #getgenv().prefix + 5) == getgenv().prefix .. "start" then
-                StartQuiz(lowerMsg:split(" ")[2])
-            elseif lowerMsg == getgenv().prefix .. "end" then
-                GameActive = false
-                PlayerScores = {}
-                if MyRole == "host" then Say("⏹️ Game Ended.") end
-            elseif lowerMsg == getgenv().prefix .. "setup" then
+            if msg:sub(1, 6) == ";start" then StartQuiz(msg:split(" ")[2])
+            elseif msg == ";stop" then GameActive = false
+            elseif msg == ";end" then 
+                GameActive = false IsDancing = false
+                local ui = CoreGui:FindFirstChild("SchweinsBotUI")
+                if ui then ui:Destroy() end
+            elseif msg == ";setup" then
                  local char = player.Character
                  if char then
                     local root = char.HumanoidRootPart.CFrame
@@ -363,12 +373,10 @@ local function OnChat(player, message)
                     local start = root.Position + (fwd.Unit * 15)
                     local rot = CFrame.lookAt(start, start + fwd)
                     if MyRole == "host" then Teleport(rot * CFrame.new(-16, 0, 0))
-                    elseif MyRole == "answer1" then Teleport(rot * CFrame.new(-8, 0, 0))
-                    elseif MyRole == "answer2" then Teleport(rot * CFrame.new(0, 0, 0))
-                    elseif MyRole == "answer3" then Teleport(rot * CFrame.new(8, 0, 0))
-                    elseif MyRole == "answer4" then Teleport(rot * CFrame.new(16, 0, 0))
+                    elseif MyRole:find("answer") then
+                        local bIdx = tonumber(MyRole:match("%d+"))
+                        Teleport(rot * CFrame.new(-16 + (bIdx * 8), 0, 0))
                     elseif MyRole == "scoreboard" then 
-                        task.wait(0.6) 
                         PerchPosition = rot * CFrame.new(0, 10, 5)
                         Teleport(PerchPosition) 
                     end
@@ -377,77 +385,54 @@ local function OnChat(player, message)
         end
 
         -- Question Tracking
-        local qNum = message:match("Question (%d+):")
-        if qNum then
-            local idx = tonumber(qNum)
-            -- We need to find which question this is by string matching
+        if message:find("Question %d+:") then
             for _, q in pairs(Questions) do
-                if message:find(q.q, 1, true) then CurrentQuestionData = q break end
+                if message:find(q.q, 1, true) then CurrentQuestion = q break end
             end
         end
 
         -- Trigger Options
         if message == ".options" then
-            AnswerSubmissions = {}
-            QuestionStartTime = tick()
+            AnswerSubmissions = {} QuestionStartTime = tick()
             if MyRole and MyRole:find("answer") then
-                local botIdx = tonumber(MyRole:match("%d+"))
-                if CurrentQuestionData then
-                    task.wait(botIdx * 0.4)
-                    Say("Option " .. botIdx .. ": " .. CurrentQuestionData.a[botIdx])
+                local bIdx = tonumber(MyRole:match("%d+"))
+                if CurrentQuestion then task.wait(bIdx * 0.4) Say("Option " .. bIdx .. ": " .. CurrentQuestion.a[bIdx]) end
+            end
+        end
+
+        -- Scoring
+        if MyRole == "scoreboard" then
+            local ansNum = tonumber(message)
+            local isTextAns = CurrentQuestion and table.find(CurrentQuestion.a, message)
+            
+            if (ansNum and ansNum >= 1 and ansNum <= 4) or isTextAns then
+                if not AnswerSubmissions[player.DisplayName] then
+                    local submitted = ansNum or table.find(CurrentQuestion.a, message)
+                    AnswerSubmissions[player.DisplayName] = {ans = submitted, time = tick() - QuestionStartTime}
                 end
             end
         end
 
-        -- Leaderboard Display
-        if message == ".score" and MyRole == "scoreboard" then
-            local scores = GetSortedScores()
-            if #scores > 0 then
-                local scoreboardStr = ""
-                for i = 1, math.min(3, #scores) do
-                    local ord = (i==1 and "1st") or (i==2 and "2nd") or (i==3 and "3rd")
-                    scoreboardStr = scoreboardStr .. ord .. " " .. scores[i].n .. " (" .. scores[i].s .. ") | "
-                end
-                Say(scoreboardStr)
-            end
-        end
-
-        -- Answer Tracking
-        if MyRole == "scoreboard" and (tonumber(msg) and tonumber(msg) >= 1 and tonumber(msg) <= 4) then
-            if not AnswerSubmissions[player.DisplayName] then
-                AnswerSubmissions[player.DisplayName] = {ans = tonumber(msg), time = tick() - QuestionStartTime}
-            end
-        end
-
-        -- Score Processing
         if message:find("The correct answer was Option") and MyRole == "scoreboard" then
             local correct = tonumber(message:match("Option (%d+)"))
-            local roundWinners = {}
+            local winners = {}
             for name, data in pairs(AnswerSubmissions) do
-                if data.ans == correct then table.insert(roundWinners, {n = name, t = data.time}) end
+                if data.ans == correct then table.insert(winners, {n = name, t = data.time}) end
             end
-            table.sort(roundWinners, function(a, b) return a.t < b.t end)
-            for i, v in ipairs(roundWinners) do
-                PlayerScores[v.n] = (PlayerScores[v.n] or 0) + math.max(1, 11 - i)
-            end
+            table.sort(winners, function(a, b) return a.t < b.t end)
+            for i, v in ipairs(winners) do PlayerScores[v.n] = (PlayerScores[v.n] or 0) + math.max(1, 11 - i) end
         end
 
-        if message == "🏆 THE QUIZ HAS ENDED! THANKS FOR PLAYING! 🏆" then CelebrateWinners() end
-
-        -- Intros
+        if message == ".score" then ShowTop3() end
+        if message:find("QUIZ HAS ENDED") then Celebrate() end
         if message == "Introduce yourself bots" then
-            local delays = {answer1=5, answer2=10, answer3=15, answer4=20, scoreboard=25}
-            if delays[MyRole] then
-                task.wait(delays[MyRole])
-                local txt = (MyRole == "scoreboard") and "And I am the Scoreboard!" or "I am Answer Bot " .. MyRole:match("%d+") .. "!"
-                Say(txt)
-                Say("/e wave")
-            end
+            local d = {answer1=5, answer2=10, answer3=15, answer4=20, scoreboard=25}
+            if d[MyRole] then task.wait(d[MyRole]) Say(MyRole=="scoreboard" and "And I am the Scoreboard!" or "I am Answer Bot " .. MyRole:match("%d+") .. "!") Say("/e wave") end
         end
     end)
 end
 
--- LISTENERS
+-- 10. LISTENERS
 for _, p in pairs(Players:GetPlayers()) do p.Chatted:Connect(function(m) OnChat(p, m) end) end
 Players.PlayerAdded:Connect(function(p) p.Chatted:Connect(function(m) OnChat(p, m) end) end)
 pcall(function() setfpscap(getgenv().fpslimit) end)
