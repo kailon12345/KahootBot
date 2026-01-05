@@ -1,17 +1,434 @@
---Config
-getgenv().owner = "i8agy" -- replace with your usenrame
-getgenv().ownerID = 7789664710 --replace with the ID in your profile, go to your profile and copy numbers inside the link
-getgenv().prefix = ";" -- can use whatever prefix you want to use
+getgenv().owner = "i8agy" -- your usenrmae goes here
+getgenv().ownerID = 7789664710 -- your UserId goes here, found in your profile URL
+getgenv().prefix = ";" 
 getgenv().fpslimit = 30 
 getgenv().bots = {
-    "Host Bot", "Answer1", "Answer2", "Answer3", "Answer4", "Scoreboard" 
-} -- replace with your bot usernames
+    "i8agy70", "i8agy71", "i8agy72", "i8agy38", "i8agy36", "urination_king"
+} --your bots go inside of this, MUST be exact spelling (include capitals)
 
-loadstring(game:HttpGet("https://gist.githubusercontent.com/kailon12345/df976557a5f1265a16f4d5041ca77b4b/raw/48a89401e74805d25490b3b5c6bb3fb6985e17e9/gistfile1.txt"))()
 
---[[
-COMMAND list
-;setup (this brings the bots to you)
-;start [amount of rounds, max is 150 rounds]
-;stop [finishes the current round and then stops the game]
-]]--
+
+--========================================================================================
+--                        DO NOT EDIT BELOW THIS LINE
+--========================================================================================
+
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TextChatService = game:GetService("TextChatService")
+local HttpService = game:GetService("HttpService")
+local Questions = {}
+local function LoadDatabase()
+    local success, result = pcall(function()
+        return game:HttpGet("https://gist.githubusercontent.com/kailon12345/db8f38e61bbffe7b463043abd78dd67a/raw/f34beaf22738672cedf3f8cb9d9c3ddab90b2f82/gistfile1.txt")
+    end)
+    
+    if success then
+        local loadFunc, err = loadstring("return " .. result)
+        if loadFunc then
+            Questions = loadFunc()
+            print("✓ Database Loaded from Gist")
+        end
+    else
+        warn("Failed to fetch Gist, using local backup.")
+        Questions = {
+            {q = "What color is an orange?", a = {"Orange", "Red", "Green", "Blue"}, c = 1},
+            {q = "What is 2 + 2?", a = {"3", "4", "5", "22"}, c = 2}
+        }
+    end
+end
+LoadDatabase()
+local MyRole = nil
+for i, botName in pairs(getgenv().bots) do
+    if LocalPlayer.Name:lower() == botName:lower() then
+        if i == 1 then MyRole = "host"
+        elseif i == 2 then MyRole = "answer1"
+        elseif i == 3 then MyRole = "answer2"
+        elseif i == 4 then MyRole = "answer3"
+        elseif i == 5 then MyRole = "answer4"
+        elseif i == 6 then MyRole = "scoreboard"
+        end
+        break
+    end
+end
+
+if not MyRole and LocalPlayer.Name ~= getgenv().owner then return end
+
+local function Say(msg)
+    if not msg then return end
+    local cleanMsg = tostring(msg)
+    local sayMessage = ReplicatedStorage:FindFirstChild("SayMessageRequest", true)
+    if sayMessage then
+        sayMessage:FireServer(cleanMsg, "All")
+    else
+        local general = TextChatService:FindFirstChild("RBXGeneral", true)
+        if general and general:IsA("TextChannel") then
+            general:SendAsync(cleanMsg)
+        end
+    end
+end
+
+local GameActive = false
+local PlayerScores = {} 
+local AnswerSubmissions = {}
+local QuestionStartTime = 0
+local UsedQuestions = {}
+local CurrentQuestionData = nil
+
+local function StartQuiz(length)
+    if MyRole ~= "host" then return end
+    GameActive = true
+    UsedQuestions = {}
+    PlayerScores = {} 
+    
+    local maxAvailable = #Questions
+    local rounds = math.clamp(tonumber(length) or maxAvailable, 1, maxAvailable)
+    
+    task.spawn(function()
+        while GameActive do
+            Say("/e dance3")
+            task.wait(10)
+        end
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.Jump = true
+        end
+    end)
+
+    Say("loading kahoot")
+    task.wait(3)
+    Say("answer 1, 2, 3 or 4 (or type the answer) to select")
+    task.wait(3)
+    
+    Say("Bots, introduce yourselves!")
+    Say(".intro") 
+    task.wait(22) 
+    
+    if not GameActive then return end
+    Say("beginning " .. rounds .. " rounds in 5 seconds")
+    task.wait(5)
+    
+    for i = 1, rounds do
+        if not GameActive then break end
+        
+        local pick
+        repeat pick = math.random(1, #Questions) until not UsedQuestions[pick]
+        UsedQuestions[pick] = true
+        
+        local qData = Questions[pick]
+        Say("Question " .. i .. ": " .. qData.q)
+        Say(".q" .. pick) 
+        task.wait(5)
+        
+        Say("Choose your answer!")
+        Say(".a" .. pick) 
+        task.wait(10)
+        
+        Say("Correct was Option " .. qData.c .. ": " .. qData.a[qData.c])
+        Say(".c" .. qData.c) 
+        task.wait(2)
+        
+        Say(".score") 
+        task.wait(5)
+    end
+    
+    if GameActive then
+        GameActive = false
+        task.wait(2)
+        Say("🏆 QUIZ FINISHED 🏆")
+        task.wait(1)
+        Say(".finalwinner")
+    end
+end
+
+local function OnChat(player, message)
+    local msg = message:lower()
+    local isOwner = (player.UserId == getgenv().ownerID or player.Name == getgenv().owner)
+
+    if isOwner then
+        if msg:sub(1, #getgenv().prefix + 5) == getgenv().prefix .. "start" then
+            local args = msg:split(" ")
+            task.spawn(function() StartQuiz(args[2]) end)
+        elseif msg == getgenv().prefix .. "stop" then
+            GameActive = false
+            if MyRole == "host" then Say("⏹️ Kahoot Stopped") end
+        end
+    end
+
+    if message == ".intro" then
+        local myNum = MyRole and MyRole:match("%d")
+        if myNum then
+            task.wait(tonumber(myNum) * 5 - 5)
+            Say("/e wave")
+            task.wait(1)
+            Say("i am answer " .. myNum)
+        end
+    elseif message:match("^%.q(%d+)") then
+        local qIdx = tonumber(message:match("%d+"))
+        CurrentQuestionData = Questions[qIdx]
+        AnswerSubmissions = {}
+        QuestionStartTime = tick()
+    elseif message:match("^%.a(%d+)") and MyRole and MyRole:find("answer") then
+        local botIdx = tonumber(MyRole:match("%d+"))
+        local qNum = tonumber(message:match("%d+"))
+        if Questions[qNum] then Say(Questions[qNum].a[botIdx]) end
+    elseif message:match("^%.c(%d+)") and MyRole == "scoreboard" then
+        local correct = tonumber(message:match("%d+"))
+        local winners = {}
+        for name, data in pairs(AnswerSubmissions) do
+            if data.ans == correct then table.insert(winners, {n = name, t = data.time}) end
+        end
+        table.sort(winners, function(a, b) return a.t < b.t end)
+        for i, v in ipairs(winners) do
+            PlayerScores[v.n] = (PlayerScores[v.n] or 0) + math.max(1, 11 - i)
+        end
+    elseif message == ".score" and MyRole == "scoreboard" then
+        local scores = {}
+        for name, s in pairs(PlayerScores) do table.insert(scores, {n = name, s = s}) end
+        table.sort(scores, function(a, b) return a.s > b.s end)
+        if #scores > 0 then
+            local m = "Current Scores: "
+            for i, v in ipairs(scores) do
+                m = m .. v.n .. " (" .. v.s .. ") | "
+                if #m > 180 then Say(m) m = "" end
+            end
+            if #m > 0 then Say(m) end
+        end
+    elseif message == ".finalwinner" and MyRole == "host" then
+        local topS, winN = -1, "No one"
+        for n, s in pairs(PlayerScores) do if s > topS then topS = s winN = n end end
+        if topS > 0 then Say("🏆 The winner is " .. winN .. " with " .. topS .. " points! 🏆") end
+    end
+
+    if MyRole == "scoreboard" and CurrentQuestionData then
+        local submittedIndex = nil
+        local num = tonumber(msg)
+        if num and num >= 1 and num <= 4 then
+            submittedIndex = num
+        else
+            for i, answerText in ipairs(CurrentQuestionData.a) do
+                if msg == answerText:lower() then
+                    submittedIndex = i
+                    break
+                end
+            end
+        end
+
+        if submittedIndex and not AnswerSubmissions[player.DisplayName] then
+            AnswerSubmissions[player.DisplayName] = {ans = submittedIndex, time = tick() - QuestionStartTime}
+        end
+    end
+end
+
+for _, p in pairs(Players:GetPlayers()) do p.Chatted:Connect(function(m) OnChat(p, m) end) end
+Players.PlayerAdded:Connect(function(p) p.Chatted:Connect(function(m) OnChat(p, m) end) end)
+pcall(function() setfpscap(getgenv().fpslimit) end)local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TextChatService = game:GetService("TextChatService")
+local HttpService = game:GetService("HttpService")
+
+local Questions = {}
+local function LoadDatabase()
+    local success, result = pcall(function()
+        return game:HttpGet("https://gist.githubusercontent.com/kailon12345/db8f38e61bbffe7b463043abd78dd67a/raw/f34beaf22738672cedf3f8cb9d9c3ddab90b2f82/gistfile1.txt")
+    end)
+    
+    if success then
+        local loadFunc, err = loadstring("return " .. result)
+        if loadFunc then
+            Questions = loadFunc()
+            print("✓ Database Loaded from Gist")
+        end
+    else
+        warn("Failed to fetch Gist, using local backup.")
+        Questions = {
+            {q = "What color is an orange?", a = {"Orange", "Red", "Green", "Blue"}, c = 1},
+            {q = "What is 2 + 2?", a = {"3", "4", "5", "22"}, c = 2}
+        }
+    end
+end
+LoadDatabase()
+
+local MyRole = nil
+for i, botName in pairs(getgenv().bots) do
+    if LocalPlayer.Name:lower() == botName:lower() then
+        if i == 1 then MyRole = "host"
+        elseif i == 2 then MyRole = "answer1"
+        elseif i == 3 then MyRole = "answer2"
+        elseif i == 4 then MyRole = "answer3"
+        elseif i == 5 then MyRole = "answer4"
+        elseif i == 6 then MyRole = "scoreboard"
+        end
+        break
+    end
+end
+
+if not MyRole and LocalPlayer.Name ~= getgenv().owner then return end
+
+local function Say(msg)
+    if not msg then return end
+    local cleanMsg = tostring(msg)
+    local sayMessage = ReplicatedStorage:FindFirstChild("SayMessageRequest", true)
+    if sayMessage then
+        sayMessage:FireServer(cleanMsg, "All")
+    else
+        local general = TextChatService:FindFirstChild("RBXGeneral", true)
+        if general and general:IsA("TextChannel") then
+            general:SendAsync(cleanMsg)
+        end
+    end
+end
+
+local GameActive = false
+local PlayerScores = {} 
+local AnswerSubmissions = {}
+local QuestionStartTime = 0
+local UsedQuestions = {}
+local CurrentQuestionData = nil
+
+local function StartQuiz(length)
+    if MyRole ~= "host" then return end
+    GameActive = true
+    UsedQuestions = {}
+    PlayerScores = {} 
+    
+    local maxAvailable = #Questions
+    local rounds = math.clamp(tonumber(length) or maxAvailable, 1, maxAvailable)
+    
+    task.spawn(function()
+        while GameActive do
+            Say("/e dance3")
+            task.wait(10)
+        end
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.Jump = true
+        end
+    end)
+
+    Say("loading kahoot")
+    task.wait(3)
+    Say("answer 1, 2, 3 or 4 (or type the answer) to select")
+    task.wait(3)
+    
+    Say("Bots, introduce yourselves!")
+    Say(".intro") 
+    task.wait(22) 
+    
+    if not GameActive then return end
+    Say("beginning " .. rounds .. " rounds in 5 seconds")
+    task.wait(5)
+    
+    for i = 1, rounds do
+        if not GameActive then break end
+        
+        local pick
+        repeat pick = math.random(1, #Questions) until not UsedQuestions[pick]
+        UsedQuestions[pick] = true
+        
+        local qData = Questions[pick]
+        Say("Question " .. i .. ": " .. qData.q)
+        Say(".q" .. pick) 
+        task.wait(5)
+        
+        Say("Choose your answer!")
+        Say(".a" .. pick) 
+        task.wait(10)
+        
+        Say("Correct was Option " .. qData.c .. ": " .. qData.a[qData.c])
+        Say(".c" .. qData.c) 
+        task.wait(2)
+        
+        Say(".score") 
+        task.wait(5)
+    end
+    
+    if GameActive then
+        GameActive = false
+        task.wait(2)
+        Say("🏆 QUIZ FINISHED 🏆")
+        task.wait(1)
+        Say(".finalwinner")
+    end
+end
+
+local function OnChat(player, message)
+    local msg = message:lower()
+    local isOwner = (player.UserId == getgenv().ownerID or player.Name == getgenv().owner)
+
+    if isOwner then
+        if msg:sub(1, #getgenv().prefix + 5) == getgenv().prefix .. "start" then
+            local args = msg:split(" ")
+            task.spawn(function() StartQuiz(args[2]) end)
+        elseif msg == getgenv().prefix .. "stop" then
+            GameActive = false
+            if MyRole == "host" then Say("⏹️ Kahoot Stopped") end
+        end
+    end
+    if message == ".intro" then
+        local myNum = MyRole and MyRole:match("%d")
+        if myNum then
+            task.wait(tonumber(myNum) * 5 - 5)
+            Say("/e wave")
+            task.wait(1)
+            Say("i am answer " .. myNum)
+        end
+    elseif message:match("^%.q(%d+)") then
+        local qIdx = tonumber(message:match("%d+"))
+        CurrentQuestionData = Questions[qIdx]
+        AnswerSubmissions = {}
+        QuestionStartTime = tick()
+    elseif message:match("^%.a(%d+)") and MyRole and MyRole:find("answer") then
+        local botIdx = tonumber(MyRole:match("%d+"))
+        local qNum = tonumber(message:match("%d+"))
+        if Questions[qNum] then Say(Questions[qNum].a[botIdx]) end
+    elseif message:match("^%.c(%d+)") and MyRole == "scoreboard" then
+        local correct = tonumber(message:match("%d+"))
+        local winners = {}
+        for name, data in pairs(AnswerSubmissions) do
+            if data.ans == correct then table.insert(winners, {n = name, t = data.time}) end
+        end
+        table.sort(winners, function(a, b) return a.t < b.t end)
+        for i, v in ipairs(winners) do
+            PlayerScores[v.n] = (PlayerScores[v.n] or 0) + math.max(1, 11 - i)
+        end
+    elseif message == ".score" and MyRole == "scoreboard" then
+        local scores = {}
+        for name, s in pairs(PlayerScores) do table.insert(scores, {n = name, s = s}) end
+        table.sort(scores, function(a, b) return a.s > b.s end)
+        if #scores > 0 then
+            local m = "Current Scores: "
+            for i, v in ipairs(scores) do
+                m = m .. v.n .. " (" .. v.s .. ") | "
+                if #m > 180 then Say(m) m = "" end
+            end
+            if #m > 0 then Say(m) end
+        end
+    elseif message == ".finalwinner" and MyRole == "host" then
+        local topS, winN = -1, "No one"
+        for n, s in pairs(PlayerScores) do if s > topS then topS = s winN = n end end
+        if topS > 0 then Say("🏆 The winner is " .. winN .. " with " .. topS .. " points! 🏆") end
+    end
+    if MyRole == "scoreboard" and CurrentQuestionData then
+        local submittedIndex = nil
+        local num = tonumber(msg)
+        if num and num >= 1 and num <= 4 then
+            submittedIndex = num
+        else
+            for i, answerText in ipairs(CurrentQuestionData.a) do
+                if msg == answerText:lower() then
+                    submittedIndex = i
+                    break
+                end
+            end
+        end
+
+        if submittedIndex and not AnswerSubmissions[player.DisplayName] then
+            AnswerSubmissions[player.DisplayName] = {ans = submittedIndex, time = tick() - QuestionStartTime}
+        end
+    end
+end
+
+for _, p in pairs(Players:GetPlayers()) do p.Chatted:Connect(function(m) OnChat(p, m) end) end
+Players.PlayerAdded:Connect(function(p) p.Chatted:Connect(function(m) OnChat(p, m) end) end)
+pcall(function() setfpscap(getgenv().fpslimit) end)
