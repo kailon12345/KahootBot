@@ -13,7 +13,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextChatService = game:GetService("TextChatService")
 local LocalPlayer = Players.LocalPlayer
 
--- WAIT FOR LOAD
+-- CHARACTER CHECK
 if not LocalPlayer.Character then LocalPlayer.CharacterAdded:Wait() end
 
 -- ROLE ASSIGNMENT
@@ -31,25 +31,16 @@ for i, botName in pairs(getgenv().bots) do
     end
 end
 
--- Stop script if not a bot or owner
-if not MyRole and LocalPlayer.Name ~= getgenv().owner then 
-    warn("Kahoot Script: Not a configured bot or owner.")
-    return 
-end
-
-print("Kahoot Script Loaded. Role: " .. (MyRole or "Owner"))
+if not MyRole and LocalPlayer.Name ~= getgenv().owner then return end
 
 -- HELPER FUNCTIONS
 local function Say(msg)
     if not msg then return end
     local cleanMsg = tostring(msg)
-    
-    -- Legacy Chat Support
     local sayMessage = ReplicatedStorage:FindFirstChild("SayMessageRequest", true)
     if sayMessage then
         sayMessage:FireServer(cleanMsg, "All")
     else
-        -- TextChatService Support
         local general = TextChatService:FindFirstChild("RBXGeneral", true)
         if general and general:IsA("TextChannel") then
             general:SendAsync(cleanMsg)
@@ -60,15 +51,11 @@ end
 local function Teleport(cframe)
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         LocalPlayer.Character.HumanoidRootPart.CFrame = cframe
-        
-        -- Scoreboard Platform Logic
         if MyRole == "scoreboard" then
             if workspace:FindFirstChild(LocalPlayer.Name .. "_Platform") then 
                 workspace[LocalPlayer.Name .. "_Platform"]:Destroy() 
             end
-            
-            -- Only create platform if we are high up (likely the perch position)
-            if cframe.Position.Y > (LocalPlayer.Character.HumanoidRootPart.Position.Y - 2) and cframe.Position.Y > 0 then
+            if cframe.Position.Y > 5 then
                  local plat = Instance.new("Part")
                  plat.Name = LocalPlayer.Name .. "_Platform"
                  plat.Size = Vector3.new(4, 1, 4)
@@ -82,12 +69,28 @@ local function Teleport(cframe)
     end
 end
 
--- VARIABLES
+-- DANCING LOGIC
+local ShouldDance = true
+task.spawn(function()
+    while true do
+        task.wait(10) -- Emotes last about 10s
+        if ShouldDance then
+            if MyRole == "host" then
+                Say("/e dance3")
+            elseif MyRole == "scoreboard" then
+                Say("/e dance2")
+            end
+        end
+    end
+end)
+
+-- GAME STATE
 local GameActive = false
 local PlayerScores = {} 
 local AnswerSubmissions = {}
 local QuestionStartTime = 0
 local PerchPosition = nil 
+local CurrentQuestionData = nil
 
 local Questions = {
     {q = "What color is an orange?", a = {"Red", "Blue", "Orange", "Green"}, c = 3},
@@ -242,7 +245,7 @@ local Questions = {
     {q = "Which online platform is mainly for professional networking?", a = {"LinkedIn", "Instagram", "TikTok", "Snapchat"}, c = 1},
 }
 
--- SCOREBOARD LOGIC
+-- SCOREBOARD UTILS
 local function GetSortedScores()
     local scores = {}
     for name, s in pairs(PlayerScores) do table.insert(scores, {n = name, s = s}) end
@@ -250,68 +253,48 @@ local function GetSortedScores()
     return scores
 end
 
-local function ShowCurrentTop3()
-    if MyRole ~= "scoreboard" then return end
-    local scores = GetSortedScores()
-    if #scores == 0 then return end
-    
-    local msg = ""
-    for i = 1, math.min(3, #scores) do
-        local ordinal = (i==1 and "1st") or (i==2 and "2nd") or (i==3 and "3rd")
-        msg = msg .. ordinal .. " " .. scores[i].n .. " (" .. scores[i].s .. ") | "
-    end
-    Say(msg)
-end
-
 local function CelebrateWinners()
     if MyRole ~= "scoreboard" then return end
+    ShouldDance = false -- Stop dancing for the walk-up
     local scores = GetSortedScores()
-    if #scores == 0 then return end
+    if #scores == 0 then ShouldDance = true return end
 
-    -- Announce Winners
     for i = 1, math.min(3, #scores) do
         task.wait(1.5)
-        if i == 1 then Say("🏆 " .. scores[i].n .. " got 1st place with " .. scores[i].s .. " points 🏆")
-        elseif i == 2 then Say("🥈 " .. scores[i].n .. " got 2nd place with " .. scores[i].s .. " points 🥈")
-        elseif i == 3 then Say("🥉 " .. scores[i].n .. " got 3rd place with " .. scores[i].s .. " points 🥉")
-        end
+        local emoji = (i==1 and "🏆") or (i==2 and "🥈") or (i==3 and "🥉")
+        local suffix = (i==1 and "st") or (i==2 and "nd") or (i==3 and "rd")
+        Say(emoji .. " " .. scores[i].n .. " got " .. i .. suffix .. " place with " .. scores[i].s .. " points " .. emoji)
     end
     
     task.wait(2)
     Say("Acknowledging all participants...")
     
-    -- Walk Up Routine
     for _, data in ipairs(scores) do
-        local pName = data.n
         local targetPlayer = nil
         for _, p in pairs(Players:GetPlayers()) do
-            if p.DisplayName == pName or p.Name == pName then targetPlayer = p break end
+            if p.DisplayName == data.n or p.Name == data.n then targetPlayer = p break end
         end
         
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
             local tRoot = targetPlayer.Character.HumanoidRootPart
-            -- Calculate position 4 studs in front, looking at player
             local frontPos = tRoot.CFrame * CFrame.new(0, 0, -4) 
             local lookAt = CFrame.lookAt(frontPos.Position, tRoot.Position)
-            
             Teleport(lookAt)
-            task.wait(0.2)
+            task.wait(0.3)
             Say("/e point")
             task.wait(1.5)
         end
     end
     
-    -- Return to perch
-    if PerchPosition then
-        Teleport(PerchPosition)
-    end
-    
-    -- Clear Scores
+    if PerchPosition then Teleport(PerchPosition) end
+    task.wait(1)
     PlayerScores = {}
     AnswerSubmissions = {}
+    ShouldDance = true -- Resume dancing
+    Say("/e dance2")
 end
 
--- HOST LOGIC
+-- HOST SEQUENCE
 local function StartQuiz(length)
     if MyRole ~= "host" then return end
     GameActive = true
@@ -324,7 +307,7 @@ local function StartQuiz(length)
     Say("Introduce yourself bots")
     task.wait(32) 
     
-    Say("Beginning " .. rounds .. " rounds. Answer by typing 1, 2, 3, or 4!")
+    Say("Beginning " .. rounds .. " rounds now")
     task.wait(4)
     
     for i = 1, rounds do
@@ -335,14 +318,16 @@ local function StartQuiz(length)
         
         local qData = Questions[pick]
         Say("Question " .. i .. ": " .. qData.q)
-        task.wait(4)
+        task.wait(2)
+        Say("(Type 1-4 or the answer)") -- Added per request
+        task.wait(2)
         
-        Say("Options: (1) " .. qData.a[1] .. " (2) " .. qData.a[2] .. " (3) " .. qData.a[3] .. " (4) " .. qData.a[4])
-        task.wait(8)
+        Say(".options")
+        task.wait(25)
         
         Say("The correct answer was Option " .. qData.c .. ": " .. qData.a[qData.c])
         task.wait(3)
-        Say("Checking the leaderboard...")
+        Say(".score")
         task.wait(5) 
     end
     
@@ -352,108 +337,117 @@ local function StartQuiz(length)
     end
 end
 
--- CHAT HANDLER
+-- MAIN CHAT HANDLER
 local function OnChat(player, message)
-    -- Wrap in task.spawn to prevent yielding the chat event
     task.spawn(function()
-        local msg = message:lower()
+        local msg = message
+        local lowerMsg = msg:lower()
         local isOwner = (player.UserId == getgenv().ownerID or player.Name == getgenv().owner)
 
-        -- COMMANDS
-        if msg == getgenv().prefix .. "check" and MyRole then
+        if lowerMsg == getgenv().prefix .. "check" and MyRole then
             Say("Bot: " .. LocalPlayer.Name .. " | Role: " .. MyRole)
         end
 
         if isOwner then
-            if msg:sub(1, #getgenv().prefix + 5) == getgenv().prefix .. "start" then
-                local args = msg:split(" ")
-                StartQuiz(args[2]) -- Removed task.spawn here as StartQuiz yields internally anyway
-                
-            elseif msg == getgenv().prefix .. "end" then
+            if lowerMsg:sub(1, #getgenv().prefix + 5) == getgenv().prefix .. "start" then
+                StartQuiz(lowerMsg:split(" ")[2])
+            elseif lowerMsg == getgenv().prefix .. "end" then
                 GameActive = false
                 PlayerScores = {}
-                AnswerSubmissions = {}
-                if MyRole == "host" then Say("⏹️ Game Forced Ended. Scores Reset.") end
-                
-            elseif msg == getgenv().prefix .. "setup" then
-                 local ownerChar = player.Character
-                 if ownerChar then
-                    local root = ownerChar.HumanoidRootPart.CFrame
-                    -- FIX: Ensure we use horizontal look vector so bots don't spawn underground
-                    local forward = root.LookVector * Vector3.new(1, 0, 1)
-                    local startPos = root.Position + (forward.Unit * 15)
-                    local flatRot = CFrame.lookAt(startPos, startPos + forward)
-
-                    if MyRole == "host" then Teleport(flatRot * CFrame.new(-16, 0, 0))
-                    elseif MyRole == "answer1" then Teleport(flatRot * CFrame.new(-8, 0, 0))
-                    elseif MyRole == "answer2" then Teleport(flatRot * CFrame.new(0, 0, 0))
-                    elseif MyRole == "answer3" then Teleport(flatRot * CFrame.new(8, 0, 0))
-                    elseif MyRole == "answer4" then Teleport(flatRot * CFrame.new(16, 0, 0))
+                if MyRole == "host" then Say("⏹️ Game Ended.") end
+            elseif lowerMsg == getgenv().prefix .. "setup" then
+                 local char = player.Character
+                 if char then
+                    local root = char.HumanoidRootPart.CFrame
+                    local fwd = root.LookVector * Vector3.new(1, 0, 1)
+                    local start = root.Position + (fwd.Unit * 15)
+                    local rot = CFrame.lookAt(start, start + fwd)
+                    if MyRole == "host" then Teleport(rot * CFrame.new(-16, 0, 0))
+                    elseif MyRole == "answer1" then Teleport(rot * CFrame.new(-8, 0, 0))
+                    elseif MyRole == "answer2" then Teleport(rot * CFrame.new(0, 0, 0))
+                    elseif MyRole == "answer3" then Teleport(rot * CFrame.new(8, 0, 0))
+                    elseif MyRole == "answer4" then Teleport(rot * CFrame.new(16, 0, 0))
                     elseif MyRole == "scoreboard" then 
                         task.wait(0.6) 
-                        -- Perch: Above Answer 2 (0, 0, 0) -> Up 10, Back 5
-                        PerchPosition = flatRot * CFrame.new(0, 10, 5)
+                        PerchPosition = rot * CFrame.new(0, 10, 5)
                         Teleport(PerchPosition) 
                     end
                  end
             end
         end
 
-        -- GAME EVENTS
-        if message == "Introduce yourself bots" then
-            if MyRole == "answer1" then task.wait(5) Say("I am Answer Bot 1!") Say("/e wave")
-            elseif MyRole == "answer2" then task.wait(10) Say("I am Answer Bot 2!") Say("/e wave")
-            elseif MyRole == "answer3" then task.wait(15) Say("I am Answer Bot 3!") Say("/e wave")
-            elseif MyRole == "answer4" then task.wait(20) Say("I am Answer Bot 4!") Say("/e wave")
-            elseif MyRole == "scoreboard" then task.wait(25) Say("And I am the Scoreboard!") Say("/e wave") end
+        -- Question Tracking
+        local qNum = message:match("Question (%d+):")
+        if qNum then
+            local idx = tonumber(qNum)
+            -- We need to find which question this is by string matching
+            for _, q in pairs(Questions) do
+                if message:find(q.q, 1, true) then CurrentQuestionData = q break end
+            end
         end
 
-        if message:find("Options:") then
+        -- Trigger Options
+        if message == ".options" then
             AnswerSubmissions = {}
             QuestionStartTime = tick()
-            for _, q in pairs(Questions) do
-                if message:find(q.a[1], 1, true) and message:find(q.a[4], 1, true) then
-                    if MyRole and MyRole:find("answer") then
-                        local botIdx = tonumber(MyRole:match("%d+"))
-                        task.wait(math.random(1, 3)) 
-                        Say(q.a[botIdx])
-                    end
-                    break
+            if MyRole and MyRole:find("answer") then
+                local botIdx = tonumber(MyRole:match("%d+"))
+                if CurrentQuestionData then
+                    task.wait(botIdx * 0.4)
+                    Say("Option " .. botIdx .. ": " .. CurrentQuestionData.a[botIdx])
                 end
             end
         end
 
-        if message:find("The correct answer was Option") and MyRole == "scoreboard" then
-            local correct = tonumber(message:match("Option (%d+)"))
-            local winners = {}
-            for name, data in pairs(AnswerSubmissions) do
-                if data.ans == correct then table.insert(winners, {n = name, t = data.time}) end
-            end
-            table.sort(winners, function(a, b) return a.t < b.t end)
-            for i, v in ipairs(winners) do
-                PlayerScores[v.n] = (PlayerScores[v.n] or 0) + math.max(1, 11 - i)
+        -- Leaderboard Display
+        if message == ".score" and MyRole == "scoreboard" then
+            local scores = GetSortedScores()
+            if #scores > 0 then
+                local scoreboardStr = ""
+                for i = 1, math.min(3, #scores) do
+                    local ord = (i==1 and "1st") or (i==2 and "2nd") or (i==3 and "3rd")
+                    scoreboardStr = scoreboardStr .. ord .. " " .. scores[i].n .. " (" .. scores[i].s .. ") | "
+                end
+                Say(scoreboardStr)
             end
         end
 
-        if message == "Checking the leaderboard..." then
-            ShowCurrentTop3()
-        end
-        
-        if message == "🏆 THE QUIZ HAS ENDED! THANKS FOR PLAYING! 🏆" then
-            CelebrateWinners()
-        end
-
-        -- PARTICIPATION
+        -- Answer Tracking
         if MyRole == "scoreboard" and (tonumber(msg) and tonumber(msg) >= 1 and tonumber(msg) <= 4) then
             if not AnswerSubmissions[player.DisplayName] then
                 AnswerSubmissions[player.DisplayName] = {ans = tonumber(msg), time = tick() - QuestionStartTime}
             end
         end
+
+        -- Score Processing
+        if message:find("The correct answer was Option") and MyRole == "scoreboard" then
+            local correct = tonumber(message:match("Option (%d+)"))
+            local roundWinners = {}
+            for name, data in pairs(AnswerSubmissions) do
+                if data.ans == correct then table.insert(roundWinners, {n = name, t = data.time}) end
+            end
+            table.sort(roundWinners, function(a, b) return a.t < b.t end)
+            for i, v in ipairs(roundWinners) do
+                PlayerScores[v.n] = (PlayerScores[v.n] or 0) + math.max(1, 11 - i)
+            end
+        end
+
+        if message == "🏆 THE QUIZ HAS ENDED! THANKS FOR PLAYING! 🏆" then CelebrateWinners() end
+
+        -- Intros
+        if message == "Introduce yourself bots" then
+            local delays = {answer1=5, answer2=10, answer3=15, answer4=20, scoreboard=25}
+            if delays[MyRole] then
+                task.wait(delays[MyRole])
+                local txt = (MyRole == "scoreboard") and "And I am the Scoreboard!" or "I am Answer Bot " .. MyRole:match("%d+") .. "!"
+                Say(txt)
+                Say("/e wave")
+            end
+        end
     end)
 end
 
+-- LISTENERS
 for _, p in pairs(Players:GetPlayers()) do p.Chatted:Connect(function(m) OnChat(p, m) end) end
 Players.PlayerAdded:Connect(function(p) p.Chatted:Connect(function(m) OnChat(p, m) end) end)
-
--- Optional: FPS Cap for performance
 pcall(function() setfpscap(getgenv().fpslimit) end)
