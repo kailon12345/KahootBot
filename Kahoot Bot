@@ -1,31 +1,20 @@
 -- KAHOOT BOT CONFIGURATION
-getgenv().owner = "i8agy" -- Owner username
-getgenv().ownerID = 7789664710 -- Owner user ID
-getgenv().prefix = ";" -- Command prefix
-getgenv().fpslimit = 30 -- FPS limit for bots
+getgenv().owner = "i8agy" 
+getgenv().ownerID = 7789664710 
+getgenv().prefix = ";" 
+getgenv().fpslimit = 30 
 getgenv().bots = {
-    "i8agy70",      -- Bot 1: Question host
-    "i8agy71",      -- Bot 2: Answer option 1
-    "i8agy72",      -- Bot 3: Answer option 2
-    "i8agy38",      -- Bot 4: Answer option 3
-    "i8agy36",      -- Bot 5: Answer option 4
-    "urination_king" -- Bot 6: Scoreboard tracker
+    "i8agy70", "i8agy71", "i8agy72", "i8agy38", "i8agy36", "urination_king"
 }
-
--- ============================================
--- KAHOOT SCRIPT - DO NOT EDIT BELOW THIS LINE
--- ============================================
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TextChatService = game:GetService("TextChatService")
 
--- Check if this account is a bot
 local MyRole = nil
-local BotIndex = nil
 for i, botName in pairs(getgenv().bots) do
-    if LocalPlayer.Name == botName then
-        BotIndex = i
+    if LocalPlayer.Name:lower() == botName:lower() then
         if i == 1 then MyRole = "host"
         elseif i == 2 then MyRole = "answer1"
         elseif i == 3 then MyRole = "answer2"
@@ -37,25 +26,51 @@ for i, botName in pairs(getgenv().bots) do
     end
 end
 
-if not MyRole then
-    if LocalPlayer.Name == getgenv().owner then
-        print("✓ Kahoot Script Loaded (Owner)")
-        print("Commands: " .. getgenv().prefix .. "setup, " .. getgenv().prefix .. "start, " .. getgenv().prefix .. "stop, " .. getgenv().prefix .. "reset")
+if not MyRole and LocalPlayer.Name ~= getgenv().owner then return end
+
+-- CHAT LOGIC
+local function Say(msg)
+    if not msg then return end
+    local cleanMsg = tostring(msg)
+    local sayMessage = ReplicatedStorage:FindFirstChild("SayMessageRequest", true)
+    if sayMessage then
+        sayMessage:FireServer(cleanMsg, "All")
     else
-        warn("This account is not configured as a bot or owner!")
+        local general = TextChatService:FindFirstChild("RBXGeneral", true)
+        if general and general:IsA("TextChannel") then
+            general:SendAsync(cleanMsg)
+        end
     end
-    return
 end
 
--- Game State
+local function Teleport(pos)
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(pos)
+        
+        -- Special platform for the Scoreboard bot (Invisible)
+        if MyRole == "scoreboard" then
+            if workspace:FindFirstChild(LocalPlayer.Name .. "_Platform") then 
+                workspace[LocalPlayer.Name .. "_Platform"]:Destroy() 
+            end
+            local plat = Instance.new("Part")
+            plat.Name = LocalPlayer.Name .. "_Platform"
+            plat.Size = Vector3.new(4, 1, 4) -- Small invisible stud
+            plat.CFrame = CFrame.new(pos - Vector3.new(0, 3.5, 0))
+            plat.Transparency = 1
+            plat.CanCollide = true
+            plat.Anchored = true
+            plat.Parent = workspace
+        end
+    end
+end
+
+-- GAME STATE
 local GameActive = false
-local CurrentQuestion = 0
-local PlayerScores = {}
+local PlayerScores = {} 
 local AnswerSubmissions = {}
 local QuestionStartTime = 0
-local ScriptActive = true
+local UsedQuestions = {}
 
--- Question Database
 local Questions = {
     {q = "What color is an orange?", a = {"Red", "Blue", "Orange", "Green"}, c = 3},
     {q = "How many legs does a spider have?", a = {"6", "8", "10", "4"}, c = 2},
@@ -209,303 +224,152 @@ local Questions = {
     {q = "Which online platform is mainly for professional networking?", a = {"LinkedIn", "Instagram", "TikTok", "Snapchat"}, c = 1},
 }
 
--- Helper Functions
-local function Say(msg)
-    if not msg then return end
-    pcall(function()
-        if ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents") then
-            ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(tostring(msg), "All")
-        end
-    end)
-end
-
-local function GetOwner()
-    local owner = Players:FindFirstChild(getgenv().owner)
-    if not owner then
-        owner = Players:GetPlayerByUserId(getgenv().ownerID)
-    end
-    return owner
-end
-
-local function Teleport(pos)
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(pos)
-    end
-end
-
-local function GetPlayersNearby(range)
-    local nearby = {}
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        return nearby
-    end
-    
-    local myPos = LocalPlayer.Character.HumanoidRootPart.Position
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-            local isBotAccount = false
-            for _, botName in pairs(getgenv().bots) do
-                if plr.Name == botName then
-                    isBotAccount = true
-                    break
-                end
-            end
-            
-            if not isBotAccount then
-                local dist = (plr.Character.HumanoidRootPart.Position - myPos).Magnitude
-                if dist <= range then
-                    table.insert(nearby, plr)
-                end
-            end
-        end
-    end
-    return nearby
-end
-
--- Command: Setup
-local function DoSetup()
-    local owner = GetOwner()
-    if not owner or not owner.Character or not owner.Character:FindFirstChild("HumanoidRootPart") then
-        return
-    end
-    
-    local ownerPos = owner.Character.HumanoidRootPart.Position
-    local ownerLook = owner.Character.HumanoidRootPart.CFrame.LookVector
-    local front = ownerPos + (ownerLook * 10)
-    
-    if MyRole == "host" then
-        Teleport(front + Vector3.new(0, 0, 5))
-        wait(0.3)
-        Say("✓ Host Ready")
-    elseif MyRole == "answer1" then
-        Teleport(front + Vector3.new(-6, 0, 0))
-    elseif MyRole == "answer2" then
-        Teleport(front + Vector3.new(-2, 0, 0))
-    elseif MyRole == "answer3" then
-        Teleport(front + Vector3.new(2, 0, 0))
-    elseif MyRole == "answer4" then
-        Teleport(front + Vector3.new(6, 0, 0))
-    elseif MyRole == "scoreboard" then
-        Teleport(front + Vector3.new(0, 10, 0))
-        wait(0.3)
-        Say("✓ Scoreboard Ready")
-    end
-end
-
--- Command: Start Quiz
-local function StartQuiz()
+-- HOST SEQUENCE
+local function StartQuiz(length)
     if MyRole ~= "host" then return end
-    
     GameActive = true
-    CurrentQuestion = 0
-    PlayerScores = {}
+    UsedQuestions = {}
     
-    Say("🎮 KAHOOT QUIZ STARTING 🎮")
-    wait(2)
-    Say("Type 1, 2, 3, or 4 to answer!")
-    wait(2)
-    Say("Get ready...")
-    wait(1)
-    Say("[START]")
+    local maxAvailable = #Questions
+    local rounds = math.clamp(tonumber(length) or maxAvailable, 1, maxAvailable)
+    
+    Say("loading kahoot")
+    task.wait(3)
+    Say("be within 50 studs to participate")
+    task.wait(3)
+    Say("answer 1, 2, 3 or 4 to select your answer")
+    task.wait(3)
+    
+    Say("[INTRO_START]")
+    task.wait(25) 
+    
+    if not GameActive then return end
+    Say("beginning " .. rounds .. " rounds in 5 seconds")
+    task.wait(5)
+    
+    for i = 1, rounds do
+        if not GameActive then break end
+        local pick
+        repeat pick = math.random(1, #Questions) until not UsedQuestions[pick]
+        UsedQuestions[pick] = true
+        
+        local qData = Questions[pick]
+        Say("[Q" .. pick .. "] Question " .. i .. ": " .. qData.q)
+        task.wait(5)
+        Say("[A" .. pick .. "]") 
+        task.wait(10)
+        Say("[C" .. qData.c .. "] Correct was Option " .. qData.c)
+        task.wait(2)
+        Say("[SCORE]")
+        task.wait(5)
+    end
+    
+    if GameActive then
+        GameActive = false
+        Say("🏆 QUIZ FINISHED 🏆")
+    end
 end
 
--- Quiz Loop (Host only)
-spawn(function()
-    while ScriptActive do
-        wait(1)
-        if GameActive and MyRole == "host" then
-            for i = 1, #Questions do
-                if not GameActive then break end
-                
-                CurrentQuestion = i
-                local q = Questions[i]
-                
-                -- Show question (5 seconds)
-                Say("[Q" .. i .. "]")
-                wait(0.5)
-                Say("Question " .. i .. "/" .. #Questions .. ": " .. q.q)
-                wait(5)
-                
-                -- Show answers (10 seconds to answer)
-                Say("[A" .. i .. "]")
-                wait(10.5)
-                
-                -- Show correct answer
-                Say("[C" .. q.c .. "]")
-                wait(0.5)
-                Say("✓ Correct: Option " .. q.c)
-                wait(2)
-                
-                -- Show scores
-                Say("[SCORE]")
-                wait(3.5)
-            end
-            
-            GameActive = false
-            Say("[END]")
-            wait(0.5)
-            Say("🏆 QUIZ COMPLETE 🏆")
-            wait(1)
-            Say("[FINAL]")
-        end
-    end
-end)
-
--- Answer Bot Responses
-spawn(function()
-    while ScriptActive do
-        wait(0.1)
-    end
-end)
-
--- Scoreboard Display
 local function ShowScores()
     if MyRole ~= "scoreboard" then return end
-    
     local scores = {}
-    for name, score in pairs(PlayerScores) do
-        table.insert(scores, {n = name, s = score})
-    end
-    
+    for name, s in pairs(PlayerScores) do table.insert(scores, {n = name, s = s}) end
     table.sort(scores, function(a, b) return a.s > b.s end)
     
-    Say("📊 SCOREBOARD 📊")
-    wait(0.4)
+    if #scores == 0 then return end
     
-    for i = 1, math.min(5, #scores) do
-        local place = i .. "."
-        if i == 1 then place = "🥇" elseif i == 2 then place = "🥈" elseif i == 3 then place = "🥉" end
-        Say(place .. " " .. scores[i].n .. ": " .. scores[i].s .. " pts")
-        wait(0.4)
+    local currentMsg = "Scores: "
+    for i, v in ipairs(scores) do
+        local entry = v.n .. " (" .. v.s .. ") | "
+        if #currentMsg + #entry > 190 then
+            Say(currentMsg)
+            currentMsg = "Scores: " .. entry
+        else
+            currentMsg = currentMsg .. entry
+        end
     end
+    Say(currentMsg)
 end
 
--- Chat Message Handler
+-- CHAT HANDLER
 local function OnChat(player, message)
-    if not message or typeof(message) ~= "string" then return end
-    
-    local isOwner = (player.Name == getgenv().owner or player.UserId == getgenv().ownerID)
-    
-    -- Owner commands
+    local msg = message:lower()
+    local isOwner = (player.UserId == getgenv().ownerID or player.Name == getgenv().owner)
+
+    if msg == getgenv().prefix .. "check" and MyRole then
+        Say("Bot: " .. LocalPlayer.Name .. " | Role: " .. MyRole)
+    end
+
     if isOwner then
-        local cmd = message:lower()
-        if cmd == getgenv().prefix .. "setup" then
-            DoSetup()
-        elseif cmd == getgenv().prefix .. "start" then
-            StartQuiz()
-        elseif cmd == getgenv().prefix .. "stop" then
+        if msg:sub(1, #getgenv().prefix + 5) == getgenv().prefix .. "start" then
+            local args = msg:split(" ")
+            task.spawn(function() StartQuiz(args[2]) end)
+        elseif msg == getgenv().prefix .. "stop" then
             GameActive = false
-            if MyRole == "host" then
-                Say("⏹️ Quiz Stopped")
-            end
-        elseif cmd == getgenv().prefix .. "reset" then
-            PlayerScores = {}
-            CurrentQuestion = 0
-            AnswerSubmissions = {}
-            if MyRole == "host" then
-                Say("🔄 Scores Reset")
-            end
-        elseif cmd == getgenv().prefix .. "quit" then
-            ScriptActive = false
-            if MyRole == "host" then
-                Say("👋 Kahoot Script Deactivated")
-            end
-        elseif cmd == getgenv().prefix .. "status" then
-            if MyRole == "host" then
-                Say("✓ Active - Role: Host")
-            end
+            if MyRole == "host" then Say("⏹️ Kahoot Stopped") end
+        elseif msg == getgenv().prefix .. "setup" then
+             local ownerChar = player.Character
+             if ownerChar then
+                local root = ownerChar.HumanoidRootPart.CFrame
+                local startPos = (root * CFrame.new(0, 0, -15)).Position 
+                
+                -- Teleport Ground Bots immediately
+                if MyRole == "host" then Teleport(startPos + Vector3.new(-16, 0, 0))
+                elseif MyRole == "answer1" then Teleport(startPos + Vector3.new(-8, 0, 0))
+                elseif MyRole == "answer2" then Teleport(startPos + Vector3.new(0, 0, 0))
+                elseif MyRole == "answer3" then Teleport(startPos + Vector3.new(8, 0, 0))
+                elseif MyRole == "answer4" then Teleport(startPos + Vector3.new(16, 0, 0))
+                
+                -- Scoreboard bot waits 0.5s so ground bots clear out first
+                elseif MyRole == "scoreboard" then 
+                    task.wait(0.5)
+                    Teleport(startPos + Vector3.new(8, 10, 5)) 
+                end
+             end
         end
     end
-    
-    -- Quiz signals
-    if message:match("%[Q%d+%]") then
-        local qNum = tonumber(message:match("%[Q(%d+)%]"))
-        if qNum then
-            CurrentQuestion = qNum
-            AnswerSubmissions = {}
-            QuestionStartTime = tick()
-        end
+
+    -- Introductions with Wave
+    if message == "[INTRO_START]" then
+        if MyRole == "answer1" then task.wait(5) Say("i am answer 1") task.wait(0.1) Say("/e wave")
+        elseif MyRole == "answer2" then task.wait(10) Say("i am answer 2") task.wait(0.1) Say("/e wave")
+        elseif MyRole == "answer3" then task.wait(15) Say("i am answer 3") task.wait(0.1) Say("/e wave")
+        elseif MyRole == "answer4" then task.wait(20) Say("i am answer 4") task.wait(0.1) Say("/e wave") end
     end
-    
-    if message:match("%[A%d+%]") and CurrentQuestion > 0 then
-        local qNum = tonumber(message:match("%[A(%d+)%]"))
-        if qNum and Questions[qNum] then
-            wait(0.3)
-            local q = Questions[qNum]
-            if MyRole == "answer1" then
-                Say("1️⃣ " .. q.a[1])
-            elseif MyRole == "answer2" then
-                Say("2️⃣ " .. q.a[2])
-            elseif MyRole == "answer3" then
-                Say("3️⃣ " .. q.a[3])
-            elseif MyRole == "answer4" then
-                Say("4️⃣ " .. q.a[4])
-            end
+
+    -- Scoring and Signals
+    if message:match("%[Q(%d+)%]") then
+        AnswerSubmissions = {}
+        QuestionStartTime = tick()
+    elseif message:match("%[A(%d+)%]") and MyRole and MyRole:find("answer") then
+        local botIdx = tonumber(MyRole:match("%d+"))
+        local qNum = tonumber(message:match("%d+"))
+        if Questions[qNum] then Say(Questions[qNum].a[botIdx]) end
+    elseif message:match("%[C(%d+)%]") and MyRole == "scoreboard" then
+        local correct = tonumber(message:match("%d+"))
+        local winners = {}
+        for name, data in pairs(AnswerSubmissions) do
+            if data.ans == correct then table.insert(winners, {n = name, t = data.time}) end
         end
-    end
-    
-    if message:match("%[SCORE%]") or message:match("%[FINAL%]") then
-        wait(0.3)
+        table.sort(winners, function(a, b) return a.t < b.t end)
+        for i, v in ipairs(winners) do
+            PlayerScores[v.n] = (PlayerScores[v.n] or 0) + math.max(1, 11 - i)
+        end
+    elseif message:match("%[SCORE%]") then
         ShowScores()
     end
-    
-    if message:match("%[C%d+%]") then
-        local correct = tonumber(message:match("%[C(%d+)%]"))
-        if correct then
-            local sorted = {}
-            for name, data in pairs(AnswerSubmissions) do
-                if data.ans == correct then
-                    table.insert(sorted, {n = name, t = data.time})
-                end
-            end
-            
-            table.sort(sorted, function(a, b) return a.t < b.t end)
-            
-            for i, sub in ipairs(sorted) do
-                local pts = math.max(0, 11 - i)
-                if i <= 10 then
-                    PlayerScores[sub.n] = (PlayerScores[sub.n] or 0) + pts
-                end
-            end
-        end
-    end
-    
-    -- Player answers (only answer1 tracks)
-    if MyRole == "answer1" and CurrentQuestion > 0 then
-        local ans = tonumber(message)
-        if ans and ans >= 1 and ans <= 4 then
-            if not AnswerSubmissions[player.Name] then
-                local nearby = GetPlayersNearby(50)
-                for _, p in pairs(nearby) do
-                    if p == player then
-                        AnswerSubmissions[player.Name] = {
-                            ans = ans,
-                            time = tick() - QuestionStartTime
-                        }
-                        break
-                    end
-                end
+
+    -- Participation Logic
+    if MyRole == "scoreboard" and (tonumber(msg) and tonumber(msg) >= 1 and tonumber(msg) <= 4) then
+        if not AnswerSubmissions[player.DisplayName] and player.Character then
+            local dist = (LocalPlayer.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
+            if dist <= 70 then
+                AnswerSubmissions[player.DisplayName] = {ans = tonumber(msg), time = tick() - QuestionStartTime}
             end
         end
     end
 end
 
--- Connect chat events
-for _, player in pairs(Players:GetPlayers()) do
-    player.Chatted:Connect(function(msg)
-        OnChat(player, msg)
-    end)
-end
-
-Players.PlayerAdded:Connect(function(player)
-    player.Chatted:Connect(function(msg)
-        OnChat(player, msg)
-    end)
-end)
-
--- Set FPS limit
-pcall(function()
-    setfpscap(getgenv().fpslimit)
-end)
-
-print("✓ Kahoot Bot Active - Role: " .. MyRole)
-print("✓ Listening for: " .. getgenv().owner .. " (ID: " .. getgenv().ownerID .. ")")
+for _, p in pairs(Players:GetPlayers()) do p.Chatted:Connect(function(m) OnChat(p, m) end) end
+Players.PlayerAdded:Connect(function(p) p.Chatted:Connect(function(m) OnChat(p, m) end) end)
+pcall(function() setfpscap(getgenv().fpslimit) end)
