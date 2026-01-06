@@ -1,17 +1,18 @@
 getgenv().owner = "Your Username" 
-getgenv().ownerID = 999999999 -- your User id (found in your profile's url) 
-getgenv().prefix = ";" -- what you want to type the commands with
+getgenv().ownerID = 999999999
+getgenv().prefix = ";"
 getgenv().fpslimit = 30 
 getgenv().bots = {
     "Host bot", "Answer1 bot", "Answer2 bot", "Answer3 bot", "Answer4 bot", "Scoreboard bot"
 }
---comands
+
+--commands
 --;setup (brings the bots to you)
---;start (starts the kahoot round, anyone within 50 studs is part of the game)
+--;start [theme] [rounds] (e.g., ";start movies 10", ";start all", ";start 15", or just ";start")
 --;stop (stops the kahoot round, after finishing the currently played round)
-
- 
-
+--;clear (clears scores)
+--;themes (lists available themes)
+--;end (stops the bot script)
 
 --================================================================================================
 --                                     DO NOT EDIT BELOW THIS LINE
@@ -21,18 +22,35 @@ getgenv().bots = {
 
 
 
-local GistURL = "https://gist.githubusercontent.com/kailon12345/db8f38e61bbffe7b463043abd78dd67a/raw/f34beaf22738672cedf3f8cb9d9c3ddab90b2f82/gistfile1.txt" 
 
-local Questions = {}
-local success, result = pcall(function()
-    return loadstring(game:HttpGet(GistURL))()
-end)
 
-if success and type(result) == "table" then
-    Questions = result
-else
-    Questions = {{q = "Gist Link Missing/Failed", a = {"Check", "The", "Link", "Again"}, c = 1}}
-end
+
+
+
+
+
+
+
+
+
+getgenv().themes = {
+    general = "https://gist.githubusercontent.com/kailon12345/db8f38e61bbffe7b463043abd78dd67a/raw",
+    all = "COMBINED",
+    movies = "https://gist.githubusercontent.com/kailon12345/764e5fc69c481940dec2050444d7c462/raw",
+    music = "https://gist.githubusercontent.com/kailon12345/b7fff38cec8e6f81ab733838d9411367/raw",
+    art = "https://gist.githubusercontent.com/kailon12345/9d99e798b68ae2cb83e1c3d8c328f9da/raw",
+    animals = "https://gist.githubusercontent.com/kailon12345/56c82a92373a5e7c6bce9d575c2e01e7/raw",
+    math = "https://gist.githubusercontent.com/kailon12345/e9924fe9617e87b604fef96c111f221d/raw",
+    science = "https://gist.githubusercontent.com/kailon12345/6dad50292108d60d8a28b45d009fa7b7/raw",
+    history = "https://gist.githubusercontent.com/kailon12345/eeed414710cc870a442d6aebea36cbfb/raw",
+    geography = "https://gist.githubusercontent.com/kailon12345/7270b4450b36ef7090d194cc6469e821/raw",
+    sports = "https://gist.githubusercontent.com/kailon12345/43725e8e2bbaad5d3571c8c4e6a6d754/raw",
+    technology = "https://gist.githubusercontent.com/kailon12345/69598e78016f8b7bd9a1d6252005f8e3/raw",
+    food = "https://gist.githubusercontent.com/kailon12345/18317ec33af8b27418c4c53d32d2e83c/raw",
+    literature = "https://gist.githubusercontent.com/kailon12345/d83498dde5d0dd7d02e3d6078a2fc201/raw",
+    videogames = "https://gist.githubusercontent.com/kailon12345/f5febe19d100922abbd3aa72acae3c63/raw"
+}
+
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -79,8 +97,47 @@ end
 
 if not MyRole and LocalPlayer.Name ~= getgenv().owner then return end
 
+local Questions = {}
+local CurrentTheme = "general"
+local ScriptActive = true
+
+local function LoadQuestions(gistURL)
+    if gistURL == "COMBINED" then
+        local combined = {}
+        for themeName, url in pairs(getgenv().themes) do
+            if themeName ~= "all" and url ~= "COMBINED" and not url:find("YOUR_") then
+                local success, result = pcall(function()
+                    return loadstring(game:HttpGet(url))()
+                end)
+                if success and type(result) == "table" then
+                    for _, question in pairs(result) do
+                        table.insert(combined, question)
+                    end
+                end
+            end
+        end
+        if #combined > 0 then
+            return combined
+        else
+            return {{q = "No themes loaded", a = {"Check", "Your", "Gist", "URLs"}, c = 1}}
+        end
+    end
+    
+    local success, result = pcall(function()
+        return loadstring(game:HttpGet(gistURL))()
+    end)
+
+    if success and type(result) == "table" then
+        return result
+    else
+        return {{q = "Gist Link Missing/Failed", a = {"Check", "The", "Link", "Again"}, c = 1}}
+    end
+end
+
+Questions = LoadQuestions(getgenv().themes.general)
+
 local function Say(msg)
-    if not msg then return end
+    if not msg or not ScriptActive then return end
     local sayMsg = ReplicatedStorage:FindFirstChild("SayMessageRequest", true)
     if sayMsg then sayMsg:FireServer(tostring(msg), "All")
     else
@@ -90,6 +147,7 @@ local function Say(msg)
 end
 
 local function Teleport(cframe)
+    if not ScriptActive then return end
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         LocalPlayer.Character.HumanoidRootPart.CFrame = cframe
         if MyRole == "scoreboard" then
@@ -109,18 +167,24 @@ local function Teleport(cframe)
         end
     end
 end
+
 local IsDancing = false 
+
 task.spawn(function()
-    while true do
+    while ScriptActive do
         task.wait(10)
-        if IsDancing then
-            if MyRole == "host" then Say("/e dance3")
-            elseif MyRole == "scoreboard" then Say("/e dance2") end
+        if IsDancing and ScriptActive then
+            if MyRole == "host" then 
+                Say("/e dance3")
+            elseif MyRole == "scoreboard" then 
+                Say("/e dance2")
+            end
         end
     end
 end)
 
 local GameActive = false
+local StoppedEarly = false
 local PlayerScores = {} 
 local AnswerSubmissions = {}
 local QuestionStartTime = 0
@@ -134,59 +198,114 @@ local function ResetStats()
 end
 
 local function Celebrate()
-    if MyRole ~= "scoreboard" then return end
+    if MyRole ~= "scoreboard" or not ScriptActive then return end
     IsDancing = false
+    
     local s = {}
-    for name, score in pairs(PlayerScores) do table.insert(s, {n = name, s = score}) end
+    for name, score in pairs(PlayerScores) do 
+        table.insert(s, {n = name, s = score}) 
+    end
     table.sort(s, function(a, b) return a.s > b.s end)
     
-    if #s == 0 then IsDancing = true return end
-
-    for i = 1, math.min(3, #s) do
-        task.wait(1.5)
-        local emoji = (i==1 and "🏆") or (i==2 and "🥈") or (i==3 and "🥉")
-        local suffix = (i==1 and "st") or (i==2 and "nd") or (i==3 and "rd")
-        Say(emoji .. " " .. s[i].n .. " got " .. i .. suffix .. " place with " .. s[i].s .. " points " .. emoji)
+    if #s == 0 then 
+        if PerchPosition then 
+            Teleport(PerchPosition) 
+            task.wait(0.5)
+        end
+        IsDancing = true
+        Say("/e dance2")
+        return 
     end
-    
+
     task.wait(1.5)
-    local target = nil
-    for _, p in pairs(Players:GetPlayers()) do
-        if p.DisplayName == s[1].n or p.Name == s[1].n then target = p break end
+    Say("🏆 FINAL RESULTS 🏆")
+    task.wait(2)
+    
+    for i, playerData in ipairs(s) do
+        if not ScriptActive then return end
+        if i == 1 then
+            Say("🏆 " .. playerData.n .. " got 1st place with " .. playerData.s .. " points! 🏆")
+        elseif i == 2 then
+            Say("🥈 " .. playerData.n .. " got 2nd place with " .. playerData.s .. " points! 🥈")
+        elseif i == 3 then
+            Say("🥉 " .. playerData.n .. " got 3rd place with " .. playerData.s .. " points! 🥉")
+        else
+            local suffix = "th"
+            if i % 10 == 1 and i ~= 11 then suffix = "st"
+            elseif i % 10 == 2 and i ~= 12 then suffix = "nd"
+            elseif i % 10 == 3 and i ~= 13 then suffix = "rd"
+            end
+            Say(playerData.n .. " got " .. i .. suffix .. " place with " .. playerData.s .. " points!")
+        end
+        
+        task.wait(1)
+        
+        local target = nil
+        for _, p in pairs(Players:GetPlayers()) do
+            if p.DisplayName == playerData.n or p.Name == playerData.n then 
+                target = p 
+                break 
+            end
+        end
+        
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            local tRoot = target.Character.HumanoidRootPart
+            Teleport(CFrame.lookAt((tRoot.CFrame * CFrame.new(0, 0, -4)).Position, tRoot.Position))
+            task.wait(0.5)
+            Say("/e point")
+            task.wait(2)
+        else
+            task.wait(1.5)
+        end
     end
     
-    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-        local tRoot = target.Character.HumanoidRootPart
-        Teleport(CFrame.lookAt((tRoot.CFrame * CFrame.new(0, 0, -4)).Position, tRoot.Position))
-        task.wait(0.5) Say("/e point") task.wait(2)
-    end
-
+    task.wait(1)
+    Say("Thanks for playing everyone!")
+    task.wait(1.5)
+    
     if PerchPosition then 
         Teleport(PerchPosition) 
         task.wait(0.5)
-        IsDancing = true
-        Say("/e dance2")
     end
+    
+    IsDancing = true
+    Say("/e dance2")
     ResetStats()
 end
 
-local function StartQuiz(length)
-    if MyRole ~= "host" then return end
+local function StartQuiz(theme, length)
+    if MyRole ~= "host" or not ScriptActive then return end
+
+    if theme and getgenv().themes[theme:lower()] then
+        CurrentTheme = theme:lower()
+        Say("Loading " .. CurrentTheme .. " questions...")
+        Questions = LoadQuestions(getgenv().themes[CurrentTheme])
+        task.wait(1)
+    elseif theme then
+        Say("Theme '" .. theme .. "' not found. Using general theme.")
+        task.wait(1)
+    end
 
     Say(".clear") 
     task.wait(1)
     
     GameActive = true
-    local rounds = math.clamp(tonumber(length) or #Questions, 1, #Questions)
+    IsDancing = false
+    
+    local rounds = length and math.clamp(tonumber(length), 1, #Questions) or #Questions
     local used = {}
     
     Say("Welcome to Schweins Kahoot!")
-    task.wait(3) Say("Introduce yourself bots") task.wait(32) 
-    Say("Beginning " .. rounds .. " rounds now")
+    task.wait(3) 
+    Say("Introduce yourself bots") 
+    task.wait(32) 
+    
+    local themeText = (CurrentTheme == "all") and "mixed" or CurrentTheme
+    Say("Beginning " .. rounds .. " rounds of " .. themeText .. " questions!")
     task.wait(2)
     
     for i = 1, rounds do
-        if not GameActive then break end
+        if not GameActive or not ScriptActive then break end
         local pick
         repeat pick = math.random(1, #Questions) until not used[pick]
         used[pick] = true
@@ -201,19 +320,69 @@ local function StartQuiz(length)
         task.wait(3) Say(".score")
         task.wait(4) 
     end
-    if GameActive then Say("🏆 THE QUIZ HAS ENDED! 🏆") end
+    
+    if GameActive then 
+        Say("🏆 THE QUIZ HAS ENDED! 🏆") 
+        IsDancing = true
+    elseif StoppedEarly then
+        Say("🏆 THE QUIZ HAS ENDED! 🏆")
+        StoppedEarly = false
+        IsDancing = true
+    end
     GameActive = false
 end
 
 local function OnChat(player, message)
+    if not ScriptActive then return end
     task.spawn(function()
+        if not ScriptActive then return end
         local msg = message:lower()
         local isOwner = (player.UserId == getgenv().ownerID or player.Name == getgenv().owner)
 
         if isOwner then
-            if msg:sub(1, 6) == ";start" then StartQuiz(msg:split(" ")[2])
-            elseif msg == ";stop" then GameActive = false
-            elseif msg == ";clear" then ResetStats() Say("Scores have been cleared!")
+            if msg:sub(1, 6) == ";start" then
+                local parts = {}
+                for word in msg:gmatch("%S+") do
+                    table.insert(parts, word)
+                end
+                
+                local theme = nil
+                local rounds = nil
+                
+                if #parts >= 2 then
+                    local num = tonumber(parts[2])
+                    if num then
+                        rounds = num
+                    else
+                        theme = parts[2]
+                        if #parts >= 3 then
+                            rounds = tonumber(parts[3])
+                        end
+                    end
+                end
+                
+                StartQuiz(theme, rounds)
+                
+            elseif msg == ";stop" then 
+                GameActive = false
+                StoppedEarly = true
+                if MyRole == "host" then
+                    IsDancing = true
+                end
+                
+            elseif msg == ";clear" then 
+                ResetStats() 
+                Say("Scores have been cleared!")
+                
+            elseif msg == ";themes" then
+                if MyRole == "host" then
+                    local themeList = "Available themes: "
+                    for themeName, _ in pairs(getgenv().themes) do
+                        themeList = themeList .. themeName .. ", "
+                    end
+                    Say(themeList:sub(1, -3))
+                end
+                
             elseif msg == ";setup" then
                  local char = player.Character
                  if char then
@@ -222,19 +391,41 @@ local function OnChat(player, message)
                     local lookAtOwner = CFrame.lookAt(targetPos, root.Position)
                     
                     if MyRole == "host" then 
-                        Teleport(lookAtOwner * CFrame.new(-20, 0, 0))
+                        Teleport(lookAtOwner * CFrame.new(-16, 0, 0))
+                        IsDancing = true
+                        
                     elseif MyRole:find("answer") then
                         local bIdx = tonumber(MyRole:match("%d+"))
-                        local xOffset = -20 + (bIdx * 8)
+                        local xOffset = -16 + (bIdx * 8)
                         Teleport(lookAtOwner * CFrame.new(xOffset, 0, 0))
+                        
                     elseif MyRole == "scoreboard" then 
-                        PerchPosition = lookAtOwner * CFrame.new(0, 10, 0)
+                        PerchPosition = lookAtOwner * CFrame.new(0, 10, 6)
                         Teleport(PerchPosition) 
+                        IsDancing = true
+                        Say("/e dance2")
                     end
                  end
+                 
             elseif msg == ";end" then
+                ScriptActive = false
                 IsDancing = false
-                if CoreGui:FindFirstChild("SchweinsBotUI") then CoreGui.SchweinsBotUI:Destroy() end
+                GameActive = false
+                
+                if CoreGui:FindFirstChild("SchweinsBotUI") then 
+                    CoreGui.SchweinsBotUI:Destroy() 
+                end
+                
+                if workspace:FindFirstChild(LocalPlayer.Name .. "_Platform") then 
+                    workspace[LocalPlayer.Name .. "_Platform"]:Destroy() 
+                end
+                
+                if MyRole then
+                    Say("Bot shutting down...")
+                end
+                
+                task.wait(0.5)
+                return
             end
         end
 
@@ -243,23 +434,37 @@ local function OnChat(player, message)
         end
 
         if message == ".clear" and MyRole == "scoreboard" then ResetStats() end
+        
         if message == ".options" then
-            AnswerSubmissions = {} QuestionStartTime = tick()
+            AnswerSubmissions = {} 
+            QuestionStartTime = tick()
             if MyRole and MyRole:find("answer") then
                 local bIdx = tonumber(MyRole:match("%d+"))
-                if CurrentQuestion then task.wait(bIdx * 0.4) Say("Option " .. bIdx .. ": " .. CurrentQuestion.a[bIdx]) end
+                if CurrentQuestion then 
+                    task.wait(bIdx * 0.4) 
+                    Say("Option " .. bIdx .. ": " .. CurrentQuestion.a[bIdx]) 
+                end
             end
         end
+        
         if message == "Introduce yourself bots" then
             local d = {answer1=5, answer2=10, answer3=15, answer4=20, scoreboard=25}
             if d[MyRole] then 
                 task.wait(d[MyRole]) 
                 Say(MyRole=="scoreboard" and "And I am the Scoreboard!" or "I am Answer Bot " .. MyRole:match("%d+") .. "!") 
                 Say("/e wave")
-                if MyRole == "scoreboard" then task.wait(2) IsDancing = true Say("/e dance2") end
-                if MyRole == "host" then task.wait(1) IsDancing = true end
+                if MyRole == "scoreboard" then 
+                    task.wait(5) 
+                    IsDancing = true 
+                    Say("/e dance2") 
+                end
+                if MyRole == "host" then 
+                    task.wait(1) 
+                    IsDancing = true 
+                end
             end
         end
+        
         if MyRole == "scoreboard" then
             if message:find("The correct answer was Option") then
                 local correct = tonumber(message:match("Option (%d+)"))
@@ -268,18 +473,25 @@ local function OnChat(player, message)
                     if data.ans == correct then table.insert(winners, {n = name, t = data.time}) end
                 end
                 table.sort(winners, function(a, b) return a.t < b.t end)
-                for i, v in ipairs(winners) do PlayerScores[v.n] = (PlayerScores[v.n] or 0) + math.max(1, 11 - i) end
+                for i, v in ipairs(winners) do 
+                    PlayerScores[v.n] = (PlayerScores[v.n] or 0) + math.max(1, 11 - i) 
+                end
+                
             elseif message == ".score" then
                 local s = {}
                 for name, score in pairs(PlayerScores) do table.insert(s, {n = name, s = score}) end
                 table.sort(s, function(a, b) return a.s > b.s end)
                 if #s > 0 then
                     local out = "Top 3: "
-                    for i=1, math.min(3,#s) do out = out .. i .. ": " .. s[i].n .. " (" .. s[i].s .. ") " end
+                    for i=1, math.min(3,#s) do 
+                        out = out .. i .. ": " .. s[i].n .. " (" .. s[i].s .. ") " 
+                    end
                     Say(out)
                 end
+                
             elseif message:find("QUIZ HAS ENDED") then
                 Celebrate()
+                
             else
                 local ansNum = tonumber(message)
                 if (ansNum and ansNum >= 1 and ansNum <= 4) and not AnswerSubmissions[player.DisplayName] then
@@ -289,6 +501,16 @@ local function OnChat(player, message)
         end
     end)
 end
-for _, p in pairs(Players:GetPlayers()) do p.Chatted:Connect(function(m) OnChat(p, m) end) end
-Players.PlayerAdded:Connect(function(p) p.Chatted:Connect(function(m) OnChat(p, m) end) end)
+
+for _, p in pairs(Players:GetPlayers()) do 
+    p.Chatted:Connect(function(m) 
+        if ScriptActive then OnChat(p, m) end
+    end) 
+end
+Players.PlayerAdded:Connect(function(p) 
+    p.Chatted:Connect(function(m) 
+        if ScriptActive then OnChat(p, m) end
+    end) 
+end)
+
 pcall(function() setfpscap(getgenv().fpslimit) end)
