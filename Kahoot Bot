@@ -5,7 +5,6 @@ getgenv().fpslimit = 30
 getgenv().bots = {
     "Host bot", "Answer1 bot", "Answer2 bot", "Answer3 bot", "Answer4 bot", "Scoreboard bot"
 }
-
 --commands
 --;setup (brings the bots to you)
 --;start [theme] [rounds] (e.g., ";start movies 10", ";start all", ";start 15", or just ";start")
@@ -276,16 +275,6 @@ end
 local function StartQuiz(theme, length)
     if MyRole ~= "host" or not ScriptActive then return end
 
-    if theme and getgenv().themes[theme:lower()] then
-        CurrentTheme = theme:lower()
-        Say("Loading " .. CurrentTheme .. " questions...")
-        Questions = LoadQuestions(getgenv().themes[CurrentTheme])
-        task.wait(1)
-    elseif theme then
-        Say("Theme '" .. theme .. "' not found. Using general theme.")
-        task.wait(1)
-    end
-
     Say(".clear") 
     task.wait(1)
     
@@ -361,7 +350,23 @@ local function OnChat(player, message)
                     end
                 end
                 
-                StartQuiz(theme, rounds)
+                if theme and getgenv().themes[theme] then
+                    CurrentTheme = theme
+                    Questions = LoadQuestions(getgenv().themes[theme])
+                    if MyRole == "host" then
+                        Say("Loading " .. theme .. " questions...")
+                        task.wait(1)
+                    end
+                elseif theme then
+                    if MyRole == "host" then
+                        Say("Theme '" .. theme .. "' not found. Using general theme.")
+                        task.wait(1)
+                    end
+                end
+                
+                if MyRole == "host" then
+                    StartQuiz(nil, rounds)
+                end
                 
             elseif msg == ";stop" then 
                 GameActive = false
